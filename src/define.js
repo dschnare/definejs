@@ -259,6 +259,7 @@ var define = (function(document) {
 
                         // Handle relative module IDs.
                         if (url.indexOf("./") === 0) url = basePath + url.substring(2);
+                        if (url.indexOf("../") === 0) url = basePath + url.substring(3);
 
                         // Prepend the baseUrl.
                         url = config.baseUrl + url;
