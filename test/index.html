@@ -1,0 +1,22 @@
+<!doctype html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <title> new document </title>
+        <meta charset="utf-8">
+        <script type="text/javascript" src="../src/define.js"></script>
+        <script>
+            define.config({
+                baseUrl: "../src/"
+            });
+
+            define(["dom-ready"], function(domReady) {
+                domReady(function() {
+                    console.log("DOM is ready");
+                });
+            });
+        </script>
+    </head>
+
+    <body>
+    </body>
+</html>
