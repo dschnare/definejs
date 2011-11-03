@@ -20,7 +20,7 @@ To install, simply download one of the files above and include them via a `<scri
 
 The [wiki](https://github.com/dschnare/definejs/wiki) contains several pages on the usage and API.
 
-**NOTICE** Like [RequireJS](http://requirejs.org/docs/api.html#define), definejs modules must map 1-to-1 to a file. The only exception is when writing modules in an embedded `<script>`
+**NOTICE:** Like [RequireJS](http://requirejs.org/docs/api.html#define), definejs modules must map 1-to-1 to a file. The only exception is when writing modules in an embedded `<script>`
 on the page that includes definejs.
 
 Browser Support
