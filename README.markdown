@@ -19,6 +19,19 @@ The `src/define.js` file is the source file with inline commenting, and the `bin
 To install, simply download one of the files above and include them via a `<script>` element.
 
 
+Browser Support
+--------------------
+
+The following browsers have been tested:
+
+IE 7/8/9
+Chrome 15+
+FF 7+
+Safari 5.1
+Opera 10+
+
+This list will be frequently updated as testing ensues.
+
 
 Overview
 --------------------
