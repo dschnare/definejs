@@ -18,6 +18,7 @@ The `src/define.js` file is the source file with inline commenting, and the `bin
 
 To install, simply download one of the files above and include them via a `<script>` element.
 
+The [wiki](https://github.com/dschnare/definejs/wiki) contains several pages on the usage and API.
 
 Browser Support
 --------------------
