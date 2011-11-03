@@ -918,17 +918,11 @@ var define = (function(document) {
             errorCallback = callback;
         };
         define.amd = {
-            basic: true,
-            require: true,
-            anon: true,
-            funcString: true,
             plugins: false,
             pluginDynamic: false,
             multiversion: true,
-            commoJsAsDefaultImports: false,
-            importsAsObject: true,
-            importsAsArray: true,
-            embeddedScripts: true
+            defaultDeps: false,
+            depsAsObject: true
         };
 
         // Save a reference to this define if it's our first time creating one.
