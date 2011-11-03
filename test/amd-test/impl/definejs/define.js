@@ -25,6 +25,13 @@ var define = (function(document) {
         q.clear = function() {
             while (this.length) this.pop();
         };
+        q.contains = function(o) {
+            var i = this.length;
+            while (i--) {
+                if (this[i] === o) return true;
+            }
+            return false;
+        };
         q.toArray = function() {
             return this.slice();
         };
@@ -636,7 +643,6 @@ var define = (function(document) {
                         script.onload = onload;
                         script.onreadystatechange = function() {
                             if (script.readyState === "complete" || script.readyState === "loaded") {
-                                cleanUp(script);
                                 onload();
                             }
                         };
@@ -655,11 +661,17 @@ var define = (function(document) {
                         if (head) head.appendChild(script);
                     };
 
-                    // If the URL is in our context then it's a circular depedency.
-                    if (url in context) {
+                    // MODULE ALREADY LOADED
+                    if (context.contains(moduleId)) {
+                        cleanUp();
+                        qualifiedImports[key] = context.get(moduleId);
+                        promise.resolve();
+                    // LOADING MODULE DETECTED (circular dependency)
+                    } else if (url in context) {
+                        cleanUp();
                         qualifiedImports[key] = undefined;
                         promise.resolve();
-                    // If the resource is in the context then we defer loading.
+                    // EMBEDDED SCRIPT DETECTED
                     } else if (resource in context) {
                         if (isCircular(resource)) {
                             cleanUp();
@@ -677,7 +689,8 @@ var define = (function(document) {
                             });
                         }
                     } else {
-                        load();
+                        // Force the load to occur in the correct sequence in IE.
+                        setTimeout(load, 1);
                     }
 
                     return promise.promise();
@@ -776,16 +789,6 @@ var define = (function(document) {
                         return promise.promise();
                     }
                 }
-            },
-            defer: function() {
-                setTimeout(function() {
-                    var q = queue.slice();
-                    queue.clear();
-
-                    while (q.length) {
-                        q.shift()(null, "", "", "");
-                    }
-                }, 1);
             }
         }
     };
@@ -831,7 +834,7 @@ var define = (function(document) {
 
                 if (exports) ctx.set(moduleId, exports);
 
-                // Go ahead and import ourselves.
+                // Go ahead and import our dependencies.
                 importerPromise.complete(function(imports) {
                     var result;
 
@@ -885,13 +888,19 @@ var define = (function(document) {
 
             setTimeout(function() {
                 // Embedded script detected.
-                if (queue.length === 1) {
-                    var q = queue.slice();
-                    queue.clear();
+                if (queue.contains(run)) {
+                    // Defer calling all queued run() functions.
+                    setTimeout(function() {
+                        // All define() calls in the embedded script will get
+                        // here but only the first one will get to call the run()
+                        // functions and clear the queue.
+                        var q = queue.slice();
+                        queue.clear();
 
-                    while (q.length) {
-                        q.shift()(null, "", "", "");
-                    }
+                        while (q.length) {
+                            q.shift()(null, "", "", "");
+                        }
+                    }, 1);
                 }
             }, 1);
         };
