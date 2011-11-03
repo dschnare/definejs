@@ -86,8 +86,6 @@ following additional signatures:
 
 Where 'imports' is an object where each key is the name of an import and whose value is a dependent module ID.
 
-    define({a: 'a', b: 'b'}, {/* module properties */});
-
     define({a: 'a', b: 'b'}, function(imports) {
       return {
         /* imports.a and imports.b are the module values from loading 'a' and 'b' */
@@ -100,8 +98,6 @@ Where 'imports' is an object where each key is the name of an import and whose v
 -----------------------------------------------
 
  Where 'imports' is an object where each key is the name of an import and whose value is a dependent module ID.
-
-    define('myModule', {a: 'a', b: 'b'}, {/* module properties */});
 
     define('myModule', {a: 'a', b: 'b'}, function(imports) {
       return {
