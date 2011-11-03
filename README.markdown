@@ -24,11 +24,11 @@ Browser Support
 
 The following browsers have been tested:
 
-IE 7/8/9
-Chrome 15+
-FF 7+
-Safari 5.1
-Opera 10+
+-   IE 7/8/9
+-   Chrome 15+
+-   FF 7+
+-   Safari 5.1
+-   Opera 10+
 
 This list will be frequently updated as testing ensues.
 
