@@ -1,3 +1,23 @@
+/**
+ * Creates a global 'define' function that adheres to the AMD specification.
+ *
+ * How Modules Are Loaded (simplified)
+ *
+ * 1) Module ID is resolved to a URL.
+ * 2) The URL is used to load the module script via <script> element if the module has not been loaded or is curently loading.
+ * 3) Once the script has loaded, it executes and performs the following:
+ *      1) Creates a promise and saves it on the current context to aid in circular detection in embedded scripts.
+ *      2) Enqueues a "run()" function to be called by the module that loaded this module.
+ *      3) Deffers checking the queue for the presence of the "run()" function from step 2.
+ *      4) Control goes back to the "onload()" handler defined in the module that loaded this one and the following is performed:
+ *          1) A "run()" function is dequeued and executed with arguments pertaining to this module.
+ *          2) The "run()" function returns a promise that will be resolved with its exports once all its dependencies have been loaded.
+ *          3) When the promise from the "run()" function has been resolved, the value is cached into the context and the promise for the
+ *          loading script is resolved.
+ *      5) When control comes back to the module definition call and if the "run()" function is present in the queue then this module
+ *      is being defined in an embedded script and a function that calls all queued up "run()" functions will be deferred until all modules
+ *      in the embedded script has had a chance to define themselves.
+ */
 var define = (function(document) {
     "use strict";
 
@@ -41,6 +61,9 @@ var define = (function(document) {
 
     lib = {
         util: {
+            defer: function(fn) {
+                setTimeout(fn, 1);
+            },
             isArray: function(o) {
                 return ({}).toString.call(o) === "[object Array]";
             },
@@ -463,13 +486,13 @@ var define = (function(document) {
                     importerPromise.error(function(value) {
                         promise.smash(value);
 
-                        setTimeout(function() {
+                        lib.util.defer(function() {
                             if (typeof errorCallback === "function") {
                                 errorCallback(value);
                             } else {
                                 throw value;
                             }
-                        }, 1);
+                        });
                     });
 
                     return promise;
@@ -593,6 +616,7 @@ var define = (function(document) {
                     }, context.config.timeout);
 
                     cleanUp = function(script) {
+                        delete context[url];
                         clearTimeout(timeoutId);
 
                         if (script) {
@@ -612,17 +636,20 @@ var define = (function(document) {
                         script = document.createElement("script");
                         script.type = "text/javascript";
 
+                        // Cache our promise with our imports so
+                        // we can detect circular dependencies.
+                        context[url] = promise;
+                        promise.imports = imports;
+
                         onload = function() {
                             var run, futureImportedValue;
 
                             cleanUp(script);
+                            // Make sure our promise is still on the context.
+                            context[url] = promise;
 
                             run = queue.dequeue();
                             futureImportedValue = run(context, resource, resourceId.toPath(), url);
-
-                            // Cache the future imported value so
-                            // we can detect circular dependencies.
-                            context[url] = futureImportedValue;
 
                             futureImportedValue.complete(function(im) {
                                 delete context[url];
@@ -632,7 +659,7 @@ var define = (function(document) {
                                 if (im.id) context.alias(resource, im.id);
 
                                 qualifiedImports[key] = im.value;
-                                promise.resolve();
+                                promise.resolve(im);
                             });
 
                             futureImportedValue.error(function(value) {
@@ -661,16 +688,32 @@ var define = (function(document) {
                         if (head) head.appendChild(script);
                     };
 
-                    // MODULE ALREADY LOADED
+                    // MODULE ALREADY LOADED/DEFINED
                     if (context.contains(moduleId)) {
                         cleanUp();
                         qualifiedImports[key] = context.get(moduleId);
                         promise.resolve();
-                    // LOADING MODULE DETECTED (circular dependency)
+                    // LOADING MODULE DETECTED
                     } else if (url in context) {
-                        cleanUp();
+                        if (isCircular(url)) {
+                            cleanUp();
+                            qualifiedImports[key] = undefined;
+                            promise.resolve();
+                        } else {
+                            context[url].complete(function(im) {
+                                cleanUp();
+                                qualifiedImports[key] = im.value;
+                                promise.resolve(im);
+                            });
+                            context[url].error(function(value) {
+                                cleanUp();
+                                promise.smash(value);
+                            });
+                        }
+
+                        /*cleanUp();
                         qualifiedImports[key] = undefined;
-                        promise.resolve();
+                        promise.resolve();*/
                     // EMBEDDED SCRIPT DETECTED
                     } else if (resource in context) {
                         if (isCircular(resource)) {
@@ -681,7 +724,7 @@ var define = (function(document) {
                             context[resource].complete(function(im) {
                                 cleanUp();
                                 qualifiedImports[key] = im.value;
-                                promise.resolve();
+                                promise.resolve(im);
                             });
                             context[resource].error(function(value) {
                                 cleanUp();
@@ -690,7 +733,7 @@ var define = (function(document) {
                         }
                     } else {
                         // Force the load to occur in the correct sequence in IE.
-                        setTimeout(load, 1);
+                        lib.util.defer(load);
                     }
 
                     return promise.promise();
@@ -872,13 +915,13 @@ var define = (function(document) {
                 importerPromise.error(function(value) {
                     promise.smash(value);
 
-                    setTimeout(function() {
+                    lib.util.defer(function() {
                         if (typeof errorCallback === "function") {
                             errorCallback(value);
                         } else {
                             throw value;
                         }
-                    }, 1);
+                    });
                 });
 
                 return promise;
@@ -886,11 +929,11 @@ var define = (function(document) {
 
             queue.enqueue(run);
 
-            setTimeout(function() {
+            lib.util.defer(function() {
                 // Embedded script detected.
                 if (queue.contains(run)) {
                     // Defer calling all queued run() functions.
-                    setTimeout(function() {
+                    lib.util.defer(function() {
                         // All define() calls in the embedded script will get
                         // here but only the first one will get to call the run()
                         // functions and clear the queue.
@@ -900,9 +943,9 @@ var define = (function(document) {
                         while (q.length) {
                             q.shift()(null, "", "", "");
                         }
-                    }, 1);
+                    });
                 }
-            }, 1);
+            });
         };
         define.config = function(value) {
             if (arguments.length) {

@@ -1,0 +1,1 @@
+define("f", ["scripts/b.js"]);
