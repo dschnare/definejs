@@ -5,11 +5,16 @@ var define = (function() {
     function log() {
         var i, len, arg, br, text, space, body;
 
-        body = document.body;
+        body = document.body || log.buffer;
         space = function() { return document.createTextNode(" "); };
         br = function() { return document.createElement("br"); };
         text = function(text) { return document.createTextNode(text + ""); };
         len = arguments.length;
+
+        if (body !== log.buffer && log.buffer) {
+            body.appendChild(log.buffer);
+            log.buffer = null;
+        }
 
         for (i = 0; i < len; i++) {
             body.appendChild(text(arguments[i]));
@@ -17,7 +22,18 @@ var define = (function() {
         }
 
         body.appendChild(br());
+
+        log.defer();
     }
+    log.buffer = document.createDocumentFragment();
+    log.defer = function() {
+        if (!document.body) {
+            setTimeout(log.defer, 0);
+        } else if (log.buffer) {
+            document.body.appendChild(log.buffer);
+            log.buffer = null;
+        }
+    };
 
 
 
@@ -47,7 +63,7 @@ var define = (function() {
 
         return {
             error: function(fn) {
-                if (lib.isFunction(fn)) dreading.push(fn);
+                if (util.isFunction(fn)) dreading.push(fn);
             },
             trigger: function(error) {
                 var i, len = dreading.length;
@@ -234,7 +250,7 @@ var define = (function() {
             script.onreadystatechange = null;
             script.onerror = null;
 
-            if (typeof onError === "function") onError("Failed to load script: " + url);
+            if (typeof onError === "function") onError(new Error("Failed to load script: " + url));
         };
 
         script.src = url;
@@ -337,8 +353,8 @@ var define = (function() {
     function makeRequire(basePath, currentModuleId, context, onError) {
         require = function() {
             // require([dependencies], callback)
-            if (lib.isArray(arguments[0])) {
-                if (lib.isFunction(arguments[1])) {
+            if (util.isArray(arguments[0])) {
+                if (util.isFunction(arguments[1])) {
                     (function(args) {
                         var deps = args[0], count = deps.length, fn = args[1];
 
@@ -438,12 +454,12 @@ var define = (function() {
                 // pass the following: context, moduleId, modulePath, moduleUrl
                 queue.dequeue()(context, moduleId, modulePath, moduleUrl, function(exports) {
                     onComplete(exports);
-                }, function(msg) {
-                    onError(msg);
+                }, function(error) {
+                    onError(error);
                 });
-            },function(msg) {
+            },function(error) {
                 delete context[moduleUrl];
-                onError(msg);
+                onError(error);
             });
         }
     }
@@ -459,7 +475,7 @@ var define = (function() {
         dependencies.count = function() { return count; };
         dependencies.forEach = function(fn) {
             for (var key in dependencies) {
-                if (dependencies.hasOwnProperty(key)) fn.call(undefined, key, deps[key]);
+                if (dependencies.hasOwnProperty(key)) fn.call(undefined, key, dependencies[key]);
             }
         };
         dependencies.contains = function(moduleId) {
@@ -492,11 +508,12 @@ var define = (function() {
                 dependencies.forEach(function(key, dep) {
                     switch (dep) {
                         case "require":
-                            commonJs.require = makeRequire(basePath, moduleId, context, null /*TODO: onError*/);
+                            importedValues[key] = commonJs.require = makeRequire(basePath, moduleId, context, null /*TODO: onError*/);
+                            commonJs.require.main = {id: moduleId, uri: moduleUrl};
                             delete dpendencies[key];
                             break;
                         case "exports":
-                            importedValues[key] = commonJs.exports = {id: moduleId, uri: moduleUrl};
+                            importedValues[key] = commonJs.exports = {};
                             delete dependencies[key];
                             break;
                         case "module":
@@ -601,7 +618,7 @@ var define = (function() {
                             try {
                                 // When all dependencies are imported define the module as 'exported'.
                                 exports = options.factory(imports.valueOf());
-                                ctx.saveModuleExports(moduleId, expots);
+                                ctx.saveModuleExports(moduleId, exports);
 
                                 // Get rid of our 'importing' state for this module.
                                 if (options.moduleId) delete ctx[options.moduleId];
@@ -610,7 +627,7 @@ var define = (function() {
                                 if (util.isFunction(fn)) fn(exports);
                                 importingPromise.resolve(exports);
                             } catch (error) {
-                                onError(error.message || error);
+                                onError(error);
                             }
 
                         // Else onComplete has been called with exports from a module being loaded.
@@ -622,7 +639,10 @@ var define = (function() {
 
                 onError = (function(fn) {
                     return function(error) {
-                        if (utils.isFunction(fn)) {
+                        delete ctx[moduleId];
+                        if (options.moduleId) delete ctx[options.moduleId];
+
+                        if (util.isFunction(fn)) {
                             fn(error);
                             importingPromise.error(error);
                         } else {
@@ -633,7 +653,7 @@ var define = (function() {
 
                 // Test if the module already exists.
                 if (moduleUrl in ctx || ctx.containsModuleExports(moduleId)) {
-                    onError("Module '" + moduleId + "' has already been defined.");
+                    onError(new Error("Module '" + moduleId + "' has already been defined."));
                     // Exit.
                     return;
                 }
@@ -653,7 +673,7 @@ var define = (function() {
                     imports.importCommonJs(moduleId, moduleUrl, modulePath, ctx, dependencies);
                     exports = imports.commonJsExports();
                 } catch (error) {
-                    onError(error.message || error);
+                    onError(error);
                     // Exit.
                     return;
                 }
