@@ -701,7 +701,7 @@ var define = (function() {
                 }
             }); // queue.enqueue(fn)
 
-            log("Define:", options.moduleId);
+            log("Define:", options.moduleId || "anon");
 
             // Set a timeout so that in the future we check for any remaining
             // 'import' callbacks on the queue. These callbacks will be from
