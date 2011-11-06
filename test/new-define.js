@@ -138,6 +138,7 @@ var define = (function() {
 
         return {
             saveModuleExports: function(moduleId, exports) {
+                if (moduleId in moduleIdAlias) moduleId = moduleIdAlias[moduleId];
                 moduleExports[moduleId] = exports;
             },
             getModuleExports: function(moduleId) {
@@ -164,7 +165,7 @@ var define = (function() {
             timeout: 5000
         };
 
-        if (!o || typeof o !== "object") o = {};
+        if (!util.isObject(o)) return config;
 
         /////////////
         // baseUrl //
@@ -182,9 +183,9 @@ var define = (function() {
         /////////////
         if ("urlArgs" in o) {
             // Ensure urlArgs is properly formatted and encoded.
-            if (typeof o.urlArgs === "string") {
+            if (util.isString(o.urlArgs)) {
                 config.urlArgs = "?" + o.urlArgs.replace(/^\?/, "");
-            } else if (typeof o.urlArgs === "object") {
+            } else if (util.isObject(o.urlArgs)) {
                 urlArgs = "";
 
                 for (key in o.urlArgs) {
@@ -193,14 +194,14 @@ var define = (function() {
 
                 if (urlArgs.charAt(0) === "&") urlArgs = urlArgs.substring(1);
 
-                config.urlArgs = "?" + urlArgs;
+                config.urlArgs = urlArgs.length ? "?" + urlArgs : urlArgs;
             }
         }
 
         ///////////
         // paths //
         ///////////
-        if (o.paths && typeof o.paths === "object") config.paths = o.paths;
+        if (util.isObject(o.paths)) config.paths = o.paths;
 
         /////////////
         // timeout //
