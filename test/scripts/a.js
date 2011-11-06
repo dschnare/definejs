@@ -1,1 +1,1 @@
-define("a");
+define("a", "The module 'a'.");

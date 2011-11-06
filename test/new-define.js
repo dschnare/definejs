@@ -231,7 +231,7 @@ var define = (function() {
     // onComplete will be called with the URL of the script when the script has loaded.
     // onError will be called with an error message if the script fails to load.
     function loadScript(url, onComplete, onError) {
-        var url = options.url, script = document.createElement("script");
+        var script = document.createElement("script");
 
         script.onload = function() {
             script.onload = null;
@@ -295,7 +295,7 @@ var define = (function() {
     }
 
     // Turn a module ID into a path to be used when resolving a module to a URL.
-    function toPath(moduleId, basePath) {
+    function toPath(moduleId, basePath, paths) {
         var i, s, path = moduleId;
 
         // Expand path aliases.
@@ -359,9 +359,7 @@ var define = (function() {
                         var deps = args[0], count = deps.length, fn = args[1];
 
                         function onComplete() {
-                            if (--count === 0) {
-                                fn();
-                            }
+                            if (--count === 0) fn();
                         }
 
                         while (deps.length) {
@@ -421,7 +419,7 @@ var define = (function() {
         }(onError));
 
         var moduleUrl = toUrl(moduleId, context.config.baseUrl, basePath, context.config.paths, context.config.urlArgs);
-        var modulePath = toPath(moduleId, basePath);
+        var modulePath = toPath(moduleId, basePath, context.config.paths);
 
         // if the module is 'loading' already then we complete with undefined (highly likely it's a circular dependency)
         if (moduleUrl in context) {
@@ -475,6 +473,7 @@ var define = (function() {
         dependencies.count = function() { return count; };
         dependencies.forEach = function(fn) {
             for (var key in dependencies) {
+                if (util.isFunction(dependencies[key])) continue;
                 if (dependencies.hasOwnProperty(key)) fn.call(undefined, key, dependencies[key]);
             }
         };
@@ -614,6 +613,11 @@ var define = (function() {
                     var count = options.dependencies.count();
 
                     return function(key, xprts) {
+                        // onComplete has been called with exports from a module being loaded.
+                        if (count) {
+                            imports.set(key, xprts);
+                        }
+
                         if (count === 0 || --count === 0) {
                             try {
                                 // When all dependencies are imported define the module as 'exported'.
@@ -629,10 +633,6 @@ var define = (function() {
                             } catch (error) {
                                 onError(error);
                             }
-
-                        // Else onComplete has been called with exports from a module being loaded.
-                        } else {
-                            imports.set(key, xprts);
                         }
                     };
                 }(onComplete));
@@ -722,6 +722,9 @@ var define = (function() {
 
         // Hook into the global error handler.
         define.error = globalErrorHandler.error;
+
+        // Expose the crossbrowser log function.
+        define.log = log;
 
         // Function to create a new context with its own configuration.
         define.context = function(config) {

@@ -9,8 +9,10 @@
                 console.log(error.message, error.stack);
             });
 
-            define({
-                value: "This is the value"
+            define(["scripts/a"], function(a) {
+                define.log("a:", a);
+
+                return "main";
             });
         </script>
     </head>
