@@ -322,7 +322,7 @@ var define = (function() {
         if (moduleId !== currentModuleId && moduleId in context) {
             o = context[moduleId];
 
-            if (promise.isResolved()) return false;
+            if (o.promise.isResolved()) return false;
 
             if (o.dependencies.contains(currentModuleId)) return true;
 
