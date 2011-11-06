@@ -278,7 +278,7 @@ var define = (function() {
         return url;
     }
 
-    // Turn a module ID into a relative path to be used when resolving a module to a URL.
+    // Turn a module ID into a path to be used when resolving a module to a URL.
     function toPath(moduleId, basePath) {
         var i, s, path = moduleId;
 
@@ -305,7 +305,7 @@ var define = (function() {
         s = path.substring(0, i+1);
 
         // If the last '/' is not found in a relative or absolute portion of the path
-        // then we retrieve the path upto the last '/'.
+        // then we retrieve the path upto and including the last '/'.
         if (i > 0 && s.search(/^\.\/|^\.\.\/|^[a-z]+:\//i) < 0) {
             path = path.substring(0, i+1);
         // If there are no '/' in the path then we set it to the empty string.
