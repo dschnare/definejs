@@ -5,36 +5,47 @@ var define = (function(document, window, setTimeout, userAgent) {
     // Cross Browser Logging //
     ///////////////////////////
     function log() {
-        var i, len, arg, br, text, space, body;
+        // Turn off logging when in production mode.
+        if (log.prod) return;
 
-        body = document.body || log.buffer;
+        var i, len, arg, br, text, space, container, frag;
+
+        container = log.getContainer() || log.buffer;
+        frag = document.createDocumentFragment();
         space = function() { return document.createTextNode(" "); };
         br = function() { return document.createElement("br"); };
         text = function(text) { return document.createTextNode(text + ""); };
         len = arguments.length;
 
-        if (body !== log.buffer && log.buffer) {
-            body.appendChild(log.buffer);
+        if (container !== log.buffer && log.buffer) {
+            container.appendChild(log.buffer);
             log.buffer = null;
         }
 
         for (i = 0; i < len; i++) {
-            body.appendChild(text(arguments[i]));
-            body.appendChild(space());
+            frag.appendChild(text(arguments[i]));
+            frag.appendChild(space());
         }
 
-        body.appendChild(br());
+        frag.appendChild(br());
+        container.appendChild(frag);
 
         log.defer();
     }
+    log.prod = false;
     log.buffer = document.createDocumentFragment();
     log.defer = function() {
-        if (!document.body) {
+        var container = log.getContainer();
+
+        if (!container) {
             setTimeout(log.defer, 0);
         } else if (log.buffer) {
-            document.body.appendChild(log.buffer);
+            container.appendChild(log.buffer);
             log.buffer = null;
         }
+    };
+    log.getContainer = function() {
+        return document.body;
     };
 
 
