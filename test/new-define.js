@@ -1,4 +1,6 @@
 var define = (function(document, window, setTimeout, userAgent) {
+    if (window.define) return window.define;
+
     ///////////////////////////
     // Cross Browser Logging //
     ///////////////////////////
