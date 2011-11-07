@@ -612,8 +612,8 @@ var define = (function(document, window, setTimeout, userAgent) {
 
             // Enqueue a function that will import our dependencies.
             // The context here will be our 'parent' context.
-            queue.enqueue(function(ctx, moduleId, modulePath, moduleUrl, onComplete, onError) {
-                var exports;
+            queue.enqueue(function(parentContext, moduleId, modulePath, moduleUrl, onComplete, onError) {
+                var exports, ctx;
 
                 // Override the onComplete and onError callbacks.
                 onComplete = (function(fn) {
@@ -658,21 +658,29 @@ var define = (function(document, window, setTimeout, userAgent) {
                     };
                 }(onError));
 
+                // If we are the global 'define' and our 'parent' context is not equal to our own
+                // (i.e. our 'parent' has a custom context) then we clean up lingering
+                // states on the global context and transfer it to our parent context and ensure
+                // we load into our parent context.
+                if (define === globalDefine) {
+                    if (parentContext !== context && options.moduleId) {
+                        parentContext[options.moduleId] = context[options.moduleId];
+                        delete context[options.moduleId];
+                    }
+
+                    ctx = parentContext;
+
+                // Else we are a customly created 'define' with its own context, so
+                // we forcefully use our own context.
+                } else {
+                    ctx = context;
+                }
+
                 // Test if the module already exists.
                 if (moduleUrl in ctx || ctx.containsModuleExports(moduleId)) {
                     onError(new Error("Module '" + moduleId + "' has already been defined."));
                     // Exit.
                     return;
-                }
-
-                // If we are the global 'define' and our 'parent' context is not equal to our own
-                // (i.e. our 'parent' is a custom context) then we clean up lingering
-                // states on the global context and transfer it to our 'parent's' context.
-                if (define === globalDefine && ctx !== context) {
-                    if (options.moduleId) {
-                        ctx[options.moduleId] = context[options.moduleId];
-                        delete context[options.moduleId];
-                    }
                 }
 
                 // Attempt to import the CommonJS dependencies.
