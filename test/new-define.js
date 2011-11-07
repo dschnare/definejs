@@ -266,7 +266,7 @@ var define = (function(document, window, setTimeout, userAgent) {
     function toUrl(moduleId, baseUrl, basePath, paths, urlArgs, ext) {
         var key, url = moduleId;
 
-        // If not extension is specified then assume '.js'.
+        // If no extension is specified then assume '.js'.
         ext = ext || ".js";
 
         // Expand path aliases.
@@ -617,6 +617,8 @@ var define = (function(document, window, setTimeout, userAgent) {
             queue.enqueue(function(parentContext, moduleId, modulePath, moduleUrl, onComplete, onError) {
                 var exports, ctx;
 
+                log("Define:", options.moduleId || (moduleId || "anon"));
+
                 // Override the onComplete and onError callbacks.
                 onComplete = (function(fn) {
                     var count = options.dependencies.count();
@@ -630,6 +632,7 @@ var define = (function(document, window, setTimeout, userAgent) {
                         if (count === 0 || --count === 0) {
                             try {
                                 // When all dependencies are imported define the module as 'exported'.
+                                log("Exporting:", options.moduleId || (moduleId || "anon"));
                                 exports = options.factory(imports.valueOf());
                                 ctx.saveModuleExports(moduleId, exports);
 
@@ -718,8 +721,6 @@ var define = (function(document, window, setTimeout, userAgent) {
                 }
             }); // queue.enqueue(fn)
 
-            log("Define:", options.moduleId || "anon");
-
             // Set a timeout so that in the future we check for any remaining
             // 'import' callbacks on the queue. These callbacks will be from
             // embedded scripts on the HTML page. When we rung these callbacks
@@ -747,7 +748,7 @@ var define = (function(document, window, setTimeout, userAgent) {
         define.context = function(config) {
             var context = makeContext();
             context.config = makeConfig(config);
-            return makeDefine(context);
+            return {define: makeDefine(context)};
         };
 
         return define;

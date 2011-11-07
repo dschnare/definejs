@@ -9,16 +9,18 @@
                 define.log("ERROR:", error.message, error.stack);
             });
 
-            define({
+            define.context({
+                baseUrl: "../src"
+            }).define({
                 id: "main",
                 imports: {
-                    a: "scripts/a",
-                    browser: "../src/browser"
+                    a: "scripts/a.js",
+                    domReady: "dom-ready"
                 },
                 module: function(imports) {
-                    define.log("a:", imports.a);
-
-                    define.log("browser:", imports.browser);
+                    imports.domReady(function() {
+                        define.log("DOM is ready. this=" + this);
+                    });
 
                     return "main";
                 }
