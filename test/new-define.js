@@ -1,4 +1,4 @@
-var define = (function() {
+var define = (function(document, window, setTimeout, userAgent) {
     ///////////////////////////
     // Cross Browser Logging //
     ///////////////////////////
@@ -38,7 +38,10 @@ var define = (function() {
 
 
 
-    var globalDefine, queue, util, globalErrorHandler;
+    var globalDefine, queue, util, globalErrorHandler, Array, String;
+
+    Array = ([]).constructor;
+    String = ("").constructor;
 
     // Utility functions.
     util = {
@@ -87,7 +90,7 @@ var define = (function() {
             var operation;
             // Use pop() for Chrome, Safari, and FireFox - Embedded scripts are always executed first.
             // Use shift for IE and Opera - Embedded scripts are always executed last.
-            if(window.navigator.userAgent.search(/safari|chrome|firefox/i) >= 0) {
+            if(userAgent.search(/safari|chrome|firefox/i) >= 0) {
                 operation = "pop";
             } else {
                 operation = "shift";
@@ -273,13 +276,15 @@ var define = (function() {
         if ((/^\/|^[a-z]+:/i).test(url) || (/\.[a-z]+$/i).test(url)) return url;
 
         // Handle relativeness.
-        if (url.substring(0, 2) === "./") {
-            url = basePath + url.substring(2);
-        } else if (url.substring(0, 3) === "../") {
-            basePath = basePath.split("/");
-            basePath.pop();
-            basePath = basePath.join("/") + basePath.length ? "/" : "";
-            url = basePath + url.substring(3);
+        if (basePath) {
+            if (url.substring(0, 2) === "./") {
+                url = basePath + url.substring(2);
+            } else if (url.substring(0, 3) === "../") {
+                basePath = basePath.split("/");
+                basePath.pop();
+                basePath = basePath.join("/") + basePath.length ? "/" : "";
+                url = basePath + url.substring(3);
+            }
         }
 
         // Prepend the baseUrl.
@@ -304,13 +309,15 @@ var define = (function() {
         }
 
         // Handle relativeness.
-        if (path.substring(0, 2) === "./") {
-            path = basePath + path.substring(2);
-        } else if (path.substring(0, 3) === "../") {
-            basePath = basePath.split("/");
-            basePath.pop();
-            basePath = basePath.join("/") + basePath.length ? "/" : "";
-            path = basePath + path.substring(3);
+        if (basePath) {
+            if (path.substring(0, 2) === "./") {
+                path = basePath + path.substring(2);
+            } else if (path.substring(0, 3) === "../") {
+                basePath = basePath.split("/");
+                basePath.pop();
+                basePath = basePath.join("/") + basePath.length ? "/" : "";
+                path = basePath + path.substring(3);
+            }
         }
 
         ///////////////////////////////////////////
@@ -599,7 +606,7 @@ var define = (function() {
                     // Exit.
                     return;
                 } else {
-                    context[options.moduleId] = {key: options.moduleId, promise: importingPromise, dependencies: dependencies};
+                    context[options.moduleId] = {promise: importingPromise, dependencies: dependencies};
                 }
             }
 
@@ -742,4 +749,4 @@ var define = (function() {
         context.config = makeConfig();
         return makeDefine(context);
     }());
-}());
+}(document, window, setTimeout, window.navigator.userAgent || ""));

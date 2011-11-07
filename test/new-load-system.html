@@ -6,13 +6,22 @@
         <script type="text/javascript" src="new-define.js"></script>
         <script type="text/javascript">
             define.error(function(error) {
-                console.log(error.message, error.stack);
+                define.log("ERROR:", error.message, error.stack);
             });
 
-            define(["scripts/a"], function(a) {
-                define.log("a:", a);
+            define({
+                id: "main",
+                imports: {
+                    a: "scripts/a",
+                    browser: "../src/browser"
+                },
+                module: function(imports) {
+                    define.log("a:", imports.a);
 
-                return "main";
+                    define.log("browser:", imports.browser);
+
+                    return "main";
+                }
             });
         </script>
     </head>
