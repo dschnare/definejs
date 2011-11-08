@@ -1,948 +1,863 @@
-/**
- * Creates a global 'define' function that adheres to the AMD specification.
- *
- * How Modules Are Loaded (simplified)
- *
- * 1) Module ID is resolved to a URL.
- * 2) The URL is used to load the module script via <script> element if the module has not been loaded or is curently loading.
- * 3) Once the script has loaded, it executes and performs the following:
- *      1) Creates a promise and saves it on the current context to aid in circular detection in embedded scripts.
- *      2) Enqueues a "run()" function to be called by the module that loaded this module.
- *      3) Deffers checking the queue for the presence of the "run()" function from step 2.
- *      4) Control goes back to the "onload()" handler defined in the module that loaded this one and the following is performed:
- *          1) A "run()" function is dequeued and executed with arguments pertaining to this module.
- *          2) The "run()" function returns a promise that will be resolved with its exports once all its dependencies have been loaded.
- *          3) When the promise from the "run()" function has been resolved, the value is cached into the context and the promise for the
- *          loading script is resolved.
- *      5) When control comes back to the module definition call and if the "run()" function is present in the queue then this module
- *      is being defined in an embedded script and a function that calls all queued up "run()" functions will be deferred until all modules
- *      in the embedded script has had a chance to define themselves.
- */
-var define = (function(document) {
-    "use strict";
+var define = (function(document, window, setTimeout, userAgent) {
+    if (window.define) return window.define;
 
-    var Array, globalDefine, errorCallback, queue, lib, makeDefine;
+    ///////////////////////////
+    // Cross Browser Logging //
+    ///////////////////////////
+    function log() {
+        // Turn off logging when in production mode.
+        if (log.prod) return;
+
+        var i, len, arg, br, text, space, container, frag;
+
+        container = log.getContainer() || log.buffer;
+        frag = document.createDocumentFragment();
+        space = function() { return document.createTextNode(" "); };
+        br = function() { return document.createElement("br"); };
+        text = function(text) { return document.createTextNode(text + ""); };
+        len = arguments.length;
+
+        if (container !== log.buffer && log.buffer) {
+            container.appendChild(log.buffer);
+            log.buffer = null;
+        }
+
+        for (i = 0; i < len; i++) {
+            frag.appendChild(text(arguments[i]));
+            frag.appendChild(space());
+        }
+
+        frag.appendChild(br());
+        container.appendChild(frag);
+
+        log.defer();
+    }
+    log.prod = false;
+    log.buffer = document.createDocumentFragment();
+    log.defer = function() {
+        var container = log.getContainer();
+
+        if (!container) {
+            setTimeout(log.defer, 0);
+        } else if (log.buffer) {
+            container.appendChild(log.buffer);
+            log.buffer = null;
+        }
+    };
+    log.getContainer = function() {
+        return document.body;
+    };
+
+
+
+
+    var globalDefine, queue, util, globalErrorHandler, Array, String;
 
     Array = ([]).constructor;
-    errorCallback = function(error) {
-        throw error;
-    };
-    queue = (function() {
-        var q = [];
+    String = ("").constructor;
 
-        q.enqueue = function(value) {
-            this.push(value);
-        };
-        q.dequeue = function() {
-            return this.shift();
-        };
-        q.peek = function() {
-            return this[0];
-        };
-        q.isEmpty = function() {
-            return this.length === 0;
-        };
-        q.clear = function() {
-            while (this.length) this.pop();
-        };
-        q.contains = function(o) {
-            var i = this.length;
-            while (i--) {
-                if (this[i] === o) return true;
-            }
-            return false;
-        };
-        q.toArray = function() {
-            return this.slice();
-        };
-
-        return q;
-    }());
-
-    lib = {
-        util: {
-            defer: function(fn) {
-                setTimeout(fn, 1);
-            },
-            isArray: function(o) {
-                return ({}).toString.call(o) === "[object Array]";
-            },
-            arrayIndexOf: function(a, e) {
-                if (!a) return -1;
-
-                var i, len = a.length;
-                for (i = 0; i < len; i++) {
-                    if (a[i] === e) return i;
-                }
-                return -1;
-            },
-            clone: (function() {
-                var typeOf = function(o) {
-                    if (lib.util.isArray(o)) return "array";
-                    if (o === null) return "null";
-                    if (o instanceof Date) return "date";
-                    return typeof o;
-                };
-
-                return function(o) {
-                    var type, result, key, i;
-
-                    type = typeOf(o);
-
-                    switch(type) {
-                        case "array":
-                            result = o.slice();
-                            i = result.length;
-                            while (i--) {
-                                result[i] = lib.util.clone(result[i]);
-                            }
-                            return result;
-                        case "object":
-                            result = {};
-                            for (key in o) {
-                                result[key] = lib.util.clone(o[key]);
-                            }
-                            return result;
-                        case "date":
-                            return new Date(o.getTime());
-                    }
-
-                    return o;
-                };
-            }())
+    // Utility functions.
+    util = {
+        isFunction: function(o) {
+            return typeof o === "function";
         },
-        makePromise: (function() {
-            var isPromise, makePromise;
-
-            isPromise = function(o) {
-                if (o) {
-                    if (typeof o.complete === "function" &&
-                        typeof o.error === "function") {
-                        return true;
-                    }
-                }
-                return false;
-            };
-
-            makePromise = function() {
-                var status = "unresolved", complete = [], error = [], val, internalResolve;
-
-                internalResolve = function(st, value) {
-                    status = st;
-                    val = value;
-
-                    var a = status === "resolved" ? complete : error;
-
-                    for (var i = 0, len = a.length; i < len; i++) {
-                        try {
-                            a[i](val);
-                        } catch (ignore) {}
-                    }
-
-                    complete = [];
-                    error = [];
-                };
-
-                return {
-                    status: function() {
-                        return status;
-                    },
-                    resolve: function(value) {
-                        if (status === "unresolved") {
-                            if (isPromise(value)) {
-                                status = "pending";
-                                value.complete(function(value) {
-                                    internalResolve("resolved", value);
-                                });
-                                value.error(function(value) {
-                                    internalResolve("error", value);
-                                });
-                            } else {
-                                internalResolve("resolved", value);
-                            }
-                        } else {
-                            throw new Error("Promise is already resolved.");
-                        }
-                    },
-                    smash: function(value) {
-                        if (status === "unresolved") {
-                            internalResolve("error", value);
-                        }
-                    },
-                    complete: function(fn) {
-                        if (status === "resolved") {
-                            fn(val);
-                        } else if (status !== "error") {
-                            complete.push(fn);
-                        }
-
-                        return this;
-                    },
-                    error: function(fn) {
-                        if (status === "error") {
-                            fn(val);
-                        } else if (status !== "resolved") {
-                            error.push(fn);
-                        }
-
-                        return this;
-                    },
-                    promise: function() {
-                        return {
-                            complete: this.complete,
-                            error: this.error
-                        };
-                    }
-                }
-            };
-
-            makePromise.isPromise = isPromise;
-
-            return makePromise;
-        }()),
-        makePromiseCollection: function() {
-            var count = 0, promise, complete, error, values = [];
-
-            complete = function(value) {
-                count -= 1;
-                values.push(value);
-                if (count === 0) {
-                    promise.resolve(values);
-                    values = [];
-                }
-            };
-            error = function(value) {
-                count = 0;
-                promise.smash(value);
-            };
-
-            promise = lib.makePromise();
-            promise.add = function(promise) {
-                if (this.status() !== "unresolved") {
-                    throw new Error("Cannot add promise to promise colleciton that is already been resolved.");
-                }
-
-                count += 1;
-                promise.complete(complete);
-                promise.error(error);
-            };
-            return promise;
+        isArray: function(o) {
+            return ({}).toString.call(o) === "[object Array]";
         },
-        resource: {
-            expandPath: function(str, context) {
-                var path, paths = context.config.paths;
-
-                for (path in paths) {
-                    str = str.replace(path, paths[path]);
-                }
-
-                return str.replace(/(^\w+:)?\/{2,}/g, function($0, $1) {
-                    if ($1) return $0;
-                    return "/";
-                });
-            },
-            makeResourceId: function(resourceIdStr, context) {
-                var extensionReg, protocolReg;
-
-                extensionReg = /\.[a-zA-Z]+$/;
-                protocolReg = /^\w+:/
-                resourceIdStr += "";
-
-                return {
-                    toPath: function() {
-                        var i, path = resourceIdStr;
-
-                        // Expand any aliased path names.
-                        path = lib.resource.expandPath(path, context);
-
-                        // Remove relativeness.
-                        if (path.indexOf("./") === 0) path = path.substring(2);
-
-                        // Remove the protocol.
-                        path = path.replace(protocolReg);
-
-                        // Apply the baseUrl.
-                        path = context.config.baseUrl + path;
-
-                        // Already a path.
-                        if (path.charAt(path.length - 1) === "/" || path.length === 0) return path;
-
-                        // Get the path.
-                        i = path.lastIndexOf("/");
-                        if (i > 0) path = path.substring(0, i + 1);
-
-                        return "";
-                    },
-                    toUrl: function(basePath, defaultExtension) {
-                        var config, url = resourceIdStr;
-
-                        // Expand any aliased path names.
-                        url = lib.resource.expandPath(url, context);
-
-                        // If the url is absolute or has an extension then we simply return it as is.
-                        if (url.charAt(0) === "/" || protocolReg.test(url) || extensionReg.test(url)) return url;
-
-                        defaultExtension = defaultExtension || ".js";
-                        config = context.config;
-                        basePath = basePath || "";
-                        basePath += "";
-
-                        // Handle relative module IDs.
-                        if (url.indexOf("./") === 0) url = basePath + url.substring(2);
-                        if (url.indexOf("../") === 0) url = basePath + url.substring(3);
-
-                        // Prepend the baseUrl.
-                        url = config.baseUrl + url;
-
-                        // Append the default extesion.
-                        url += defaultExtension;
-
-                        // Append any url arguments.
-                        url += config.urlArgs;
-
-                        return url;
-                    },
-                    toString: function() {
-                        return resourceIdStr;
-                    },
-                    valueOf: function() {
-                        return resourceIdStr;
-                    }
-                }
-            }
+        isString: function(o) {
+            return o instanceof String || typeof o === "string";
         },
-        define: {
-            makeContext: function() {
-                var data, _alias, context;
-
-                data = {};
-                _alias = {};
-
-                context = {
-                    get: function(name) {
-                        if (typeof name === "string") {
-                            return data[name];
-                        }
-                    },
-                    set: function(name, value) {
-                        if (typeof name === "string") {
-                            data[name] = value;
-
-                            if (name in _alias) {
-                                name = _alias[name];
-                                data[name] = value;
-                            }
-                        }
-                    },
-                    contains: function(name) {
-                        return name in data;
-                    },
-                    alias: function(name, alias) {
-                        if (typeof name === "string" && typeof alias === "string") {
-                            _alias[name] = alias;
-                            data[alias] = data[name];
-                        }
-                    }
-                };
-
-                return context;
-            },
-            makeConfig: function(o) {
-                var key, urlArgs;
-
-                o = lib.util.clone(o);
-
-                if (!o || typeof o !== "object") o = {};
-
-                // Ensure the baseUrl ends with '/' if it's not the empty string.
-                if (typeof o.baseUrl === "string" && o.baseUrl.length !== 0) {
-                    if (o.baseUrl.charAt(o.baseUrl.length - 1) !== "/") o.baseUrl += "/";
-                } else {
-                    o.baseUrl = "";
-                }
-
-                // Ensure urlArgs is properly formatted and encoded.
-                if (typeof o.urlArgs === "string") {
-                    o.urlArgs = "?" + o.urlArgs.replace(/^\?/, "");
-                } else if (typeof o.urlArgs === "object") {
-                    urlArgs = "";
-
-                    for (key in o.urlArgs) {
-                        urlArgs = "&" + key + "=" + encodeURIComponent(o.urlArgs[key] + "");
-                    }
-
-                    if (urlArgs.charAt(0) === "&") urlArgs = urlArgs.substring(1);
-
-                    o.urlArgs = "?" + urlArgs;
-                } else {
-                    o.urlArgs = "";
-                }
-
-                if (typeof o.paths !== "object") o.paths = {};
-
-                if (!isFinite(o.timeout) || o.timeout <= 0) {
-                    o.timeout = 5000;
-                }
-
-                return o;
-            },
-            makeOptions: (function() {
-                var inspector = {
-                    shouldInspect: function(options) {
-                        return typeof options.module === "function" && (!options.imports || options.imports.length === 0);
-                    },
-                    inspect: function(options) {
-                        var script, args, arg, i, len, reg, result, imports = [];
-
-                        script = options.module.toString();
-                        args = /^function\s*\((.*?)\)/.exec(script)[1];
-
-                        if (args) {
-                            args = args.split(",");
-                            len = args.length;
-                            for (i = 0; i < len; i++) {
-                                arg = args[i].replace(/^\s+|\s+$/g, "");
-                                switch (arg) {
-                                    case "require":
-                                    case "exports":
-                                    case "module":
-                                        imports.push(arg);
-                                        break;
-                                    default:
-                                        throw new Error("Unrecognized dependency '" + arg + "' in script: " + script);
-                                }
-                            }
-                        }
-
-                        reg = /require\(('|")(.+?)\1\)/g;
-                        result = reg.exec(script);
-                        while (result) {
-                            imports.push(result[2]);
-                            result = reg.exec(script);
-                        }
-
-                        options.imports = imports;
-                    }
-                };
-
-                return function(options) {
-                    var deps;
-                    // makeOptions(fn)
-                    // makeOptions(id, [imports], fn | value)
-                    if (arguments.length > 1 || typeof options === "function") {
-                        // id, [deps], module
-                        deps = Array.prototype.slice.call(arguments);
-
-                        options = {
-                            id: typeof deps[0] === "string" ? deps.shift() : "",
-                            module: deps.pop(),
-                            imports: deps[0]
-                        };
-                    // makeOptions(value)
-                    } else if (typeof options !== "object") {
-                        options = {module: options};
-                    // makeOptions({value})
-                    } else if (options && typeof options === "object" && !("module" in options)) {
-                        options = {module: options};
-                    }
-                    // makeOptions({id:id, imports:[imports], module:fn | value})
-                    // makeOptions({id:id, imports:{imports}, module:fn | value})
-                    // else {}
-
-                    if ("id" in options) {
-                        if (typeof options.id !== "string") {
-                            options.id += "";
-                        }
-
-                        if (options.id.indexOf("./") === 0) options.id = options.id.substring(2);
-                    }
-
-                    // Attempt to inspect the source code if we should.
-                    if (inspector.shouldInspect(options)) {
-                        inspector.inspect(options);
-                    }
-
-                    return options;
-                };
-            }()),
-            makeRequire: function(basePath, context) {
-                var require, extensionsReg = /\.[a-zA-Z]+$/, load;
-
-                load = function(imports, fn) {
-                    var promise, importer, importerPromise;
-
-                    promise = lib.makePromise();
-                    importer = lib.define.makeImporter("", basePath, imports, {}, context);
-                    importerPromise = importer.run();
-
-                    importerPromise.complete(function(imports) {
-                        try {
-                            imports.callFactory(fn);
-                            promise.resolve();
-                        } catch (error) {
-                            promise.smash(error);
-                        }
-                    });
-                    importerPromise.error(function(value) {
-                        promise.smash(value);
-
-                        lib.util.defer(function() {
-                            if (typeof errorCallback === "function") {
-                                errorCallback(value);
-                            } else {
-                                throw value;
-                            }
-                        });
-                    });
-
-                    return promise;
-                };
-
-                require = function() {
-                    // require([dependencies], callback)
-                    if (lib.util.isArray(arguments[0])) {
-                        if (typeof arguments[1] === "function") {
-                            load(arguments[0], arguments[1]);
-                        } else {
-                            throw new Error("TypeError: Expected a callback function.");
-                        }
-                        return;
-                    // require(moduleId)
-                    } else if (typeof arguments[0] === "string") {
-                        if (arguments[0] === "require") {
-                            return lib.define.makeRequire(basePath, context);
-                        }
-
-                        if (!context.contains(arguments[0])) throw new Error("Module does not exist: " + arguments[0]);
-                        return context.get(arguments[0]);
-                    }
-
-                    throw new Error("TypeError: Expected a module ID.");
-                };
-                require.toUrl = function(resource) {
-                    var ext, resourceId, url;
-
-                    if (typeof resource === "string" && extensionsReg.test(resource)) {
-                        // Retrieve and remove the extension.
-                        ext = resource.match(extensionsReg).pop();
-                        resource = resource.replace(extensionsReg, "");
-                        // Make a resourceId.
-                        resourceId = lib.resource.makeResourceId(resource, context);
-                        // Convert to a URL with our extension set as the default.
-                        // Truncate any url args if necessary.
-                        return resourceId.toUrl(basePath, ext).split("?").shift();
-                    }
-
-                    throw new Error("TypeError: Expected a module ID of the form 'module-id.extension'.");
-                };
-
-                return require;
-            },
-            makeImporter: function(moduleId, basePath, imports, exports, context) {
-                var qualifiedImports, promise, running, makeImports, makeScriptLoader, makeFinishedImports, isCircular;
-
-                ///////////////////////
-                // Private Functions //
-                ///////////////////////
-
-                // Define a maker that normalizes our imports.
-                makeImports = (function() {
-                    var normalizeImports;
-
-                    // Normalizes the imports so the imports will be an object
-                    // whose keys are valid identifiers and values are resource ID collections.
-                    normalizeImports = function(imports) {
-                        if (!imports) return [];
-
-                        // Imports is an array.
-                        if (lib.util.isArray(imports)) {
-                            imports = (function() {
-                                var i, resourceId;
-
-                                i = imports.length;
-
-                                while (i--) {
-                                    imports[i] = lib.resource.makeResourceId(imports[i], context);
-                                }
-
-                                return imports;
-                            }());
-                        // Imports is an object.
-                        } else {
-                            imports = (function() {
-                                var o, key;
-
-                                o = {};
-                                for (key in imports) {
-                                    o[key] = lib.resource.makeResourceId(imports[key], context);
-                                }
-
-                                return o;
-                            }());
-                        }
-
-                        return imports;
-                    };
-
-                    return function(imports) {
-                        return normalizeImports(imports);
-                    }
-                }());
-
-                // Define a maker that makes a loader for a script resource.
-                makeScriptLoader = function(key, resourceId) {
-                    var timeoutId, promise, cleanUp, load, resource, url;
-
-                    promise = lib.makePromise();
-
-                    // Handle CommonJS dependencies according to the AMD spec.
-                    if (key === "exports" || resourceId.toString() === "exports") {
-                        qualifiedImports[key] = qualifiedImports.exports = exports;
-                        promise.resolve();
-                        return promise.promise();
-                    } else if (key === "require" || resourceId.toString() === "require") {
-                        qualifiedImports[key] = qualifiedImports.require = lib.define.makeRequire(basePath, context);
-                        promise.resolve();
-                        return promise.promise();
-                    } else if (key === "module" || resourceId.toString() === "module") {
-                        // This will have to be filled in later.
-                        qualifiedImports[key] = qualifiedImports.module = {id: ""};
-                        promise.resolve();
-                        return promise.promise();
-                    }
-
-                    timeoutId = setTimeout(function() {
-                        promise.smash(new Error("Failed to load module due to timeout: " + url));
-                    }, context.config.timeout);
-
-                    cleanUp = function(script) {
-                        clearTimeout(timeoutId);
-
-                        if (script) {
-                            script.onreadystatechange = null;
-                            script.onload = null;
-                            script.onerror = null;
-                            script.onabort = null;
-                        }
-                    };
-
-                    resource = resourceId.toString();
-                    url = resourceId.toUrl(basePath);
-
-                    load = function() {
-                        var script, head, onload;
-
-                        script = document.createElement("script");
-                        script.type = "text/javascript";
-
-                        context[url] = promise;
-
-                        onload = function() {
-                            var run, futureImportedValue;
-
-                            cleanUp(script);
-
-                            run = queue.dequeue();
-                            futureImportedValue = run(context, resource, resourceId.toPath(), url);
-
-                            futureImportedValue.complete(function(im) {
-                                delete context[url];
-
-                                // Cache the imported value and set its alias.
-                                context.set(resource, im.value);
-                                if (im.id) context.alias(resource, im.id);
-
-                                qualifiedImports[key] = im.value;
-                                promise.resolve(im);
-                            });
-
-                            futureImportedValue.error(function(value) {
-                                promise.error(value);
-                            });
-                        };
-
-                        script.onload = onload;
-                        script.onreadystatechange = function() {
-                            if (script.readyState === "complete" || script.readyState === "loaded") {
-                                onload();
-                            }
-                        };
-
-                        script.onerror = function() {
-                            cleanUp(script);
-                            promise.smash(new Error("Failed to load module: " + url));
-                        };
-                        script.onabort = function() {
-                            cleanUp(script);
-                            promise.smash(new Error("Failed to load module: " + url));
-                        };
-                        script.src = url;
-
-                        head = document.getElementsByTagName("head")[0];
-                        if (head) head.appendChild(script);
-                    };
-
-                    // MODULE ALREADY LOADED/DEFINED
-                    if (context.contains(moduleId)) {
-                        console.log("MODULE LOADED AND READING FROM CACHE: ", moduleId);
-                        cleanUp();
-                        qualifiedImports[key] = context.get(moduleId);
-                        promise.resolve();
-                    // LOADING MODULE DETECTED
-                    } else if (url in context) {
-                        console.log("CYCLIC DEP DETECTED: ", url, " ", resource, " module ID:", moduleId);
-                        cleanUp();
-                        qualifiedImports[key] = undefined;
-                        promise.resolve();
-                    // EMBEDDED SCRIPT DETECTED
-                    } else if (resource in context) {
-                        if (isCircular(resource)) {
-                            cleanUp();
-                            qualifiedImports[key] = undefined;
-                            promise.resolve();
-                        } else {
-                            context[resource].complete(function(im) {
-                                cleanUp();
-                                qualifiedImports[key] = im.value;
-                                promise.resolve(im);
-                            });
-                            context[resource].error(function(value) {
-                                cleanUp();
-                                promise.smash(value);
-                            });
-                        }
-                    } else {
-                        // Force the load to occur in the correct sequence in IE.
-                        lib.util.defer(load);
-                    }
-
-                    return promise.promise();
-                };
-
-                makeFinishedImports = function() {
-                    if (lib.util.isArray(imports)) {
-                        qualifiedImports.length = imports.length;
-
-                        return {
-                            qualifiedImports: qualifiedImports,
-                            exports: function() {
-                                return qualifiedImports.exports;
-                            },
-                            module: function() {
-                                return qualifiedImports.module;
-                            },
-                            require: function(value) {
-                                return qualifiedImports.require;
-                            },
-                            callFactory: function(fn) {
-                                var args = Array.prototype.slice.call(qualifiedImports);
-                                return fn.apply(undefined, args);
-                            }
-                        };
-                    }
-
-                    return {
-                        qualifiedImports: qualifiedImports,
-                        exports: function(value) {
-                            return qualifiedImports.exports;
-                        },
-                        module: function(value) {
-                            return qualifiedImports.module;
-                        },
-                        require: function(value) {
-                            return qualifiedImports.require;
-                        },
-                        callFactory: function(fn) {
-                            return fn.call(undefined, qualifiedImports);
-                        }
-                    }
-                };
-
-                isCircular = function(resource) {
-                    var promise, imports, key;
-
-                    if (resource !== moduleId && resource in context) {
-                        promise = context[resource];
-                        imports = promise.imports;
-
-                        if (promise.status() !== "unresolved") {
-                            return false;
-                        }
-
-                        for (key in imports) {
-                            if (imports[key].toString() === moduleId) return true;
-                        }
-
-                        for (key in imports) {
-                            if (isCircular(imports[key].toString())) return true;
-                        }
-                    }
-
-                    return false;
-                };
-
-                promise = lib.makePromise();
-                qualifiedImports = {};
-                imports = makeImports(imports);
-                running = false;
-
-                return {
-                    run: function() {
-                        if (running) return promise.promise();
-                        running = true;
-
-                        var promiseCol, key, dummyPromise;
-
-                        promiseCol = lib.makePromiseCollection();
-                        dummyPromise = lib.makePromise();
-                        promiseCol.add(dummyPromise);
-
-                        for (key in imports) {
-                            promiseCol.add(makeScriptLoader(key, imports[key]));
-                        }
-
-                        promiseCol.complete(function() {
-                            promise.resolve(makeFinishedImports());
-                        });
-                        promiseCol.error(function(value) {
-                            promise.smash(value);
-                        });
-                        dummyPromise.resolve();
-
-                        return promise.promise();
-                    }
-                }
-            }
+        isObject: function(o) {
+            if (o === null || o === undefined) return false;
+            return typeof o === "object";
         }
     };
 
-    makeDefine = function(context) {
-        var define;
+    // The global error handler.
+    globalErrorHandler = (function() {
+        var dreading = [];
 
-        define = function(options) {
-            var promise, embeddedPromise, exports, run;
+        return {
+            error: function(fn) {
+                if (util.isFunction(fn)) dreading.push(fn);
+            },
+            trigger: function(error) {
+                var i, len = dreading.length;
 
-            options = lib.define.makeOptions.apply(undefined, arguments);
+                for (i = 0; i < len; i++) {
+                    dreading[i](error);
+                }
+            }
+        };
+    }());
 
-            // Create an exports object if 'exports' is in our imports.
-            exports = lib.util.arrayIndexOf(options.imports, "exports") >= 0 ? {} : null;
-            promise = lib.makePromise();
-            embeddedPromise = lib.makePromise();
-            // Put our embedded promise  on the context so defines in the same embedded script
-            // will be deferred based on this promise.
-            if (options.id) {
-                embeddedPromise.imports = options.imports;
-                context[options.id] = embeddedPromise;
+    //////////////////////////////////////
+    // The Module Import Callback Queue //
+    //////////////////////////////////////
+    queue = (function() {
+        var queue = [];
+        queue.enqueue = function(o) {
+            this.push(o);
+        };
+        queue.dequeue = (function() {
+            var operation;
+            // Use pop() for Chrome, Safari, and FireFox - Embedded scripts are always executed first.
+            // Use shift for IE and Opera - Embedded scripts are always executed last.
+            if(userAgent.search(/safari|chrome|firefox/i) >= 0) {
+                operation = "pop";
+            } else {
+                operation = "shift";
             }
 
-            run = function(ctx, moduleId, path, url) {
-                var importer, importerPromise;
+            return function() {
+                return this[operation]();
+            };
+        }());
+        queue.clear = function() {
+            while (this.length) this.pop();
+        };
 
-                // If we are the global define and the context on the promise is not equal to our own, then
-                // this means that we are being loaded into the context on the promise and we must
-                // paramaterize the context on the promise.
-                if (define === globalDefine && ctx && ctx !== context) {
-                    // Remove our embedded promise (any modules dependent on this will timeout).
-                    embeddedPromise = null;
-                    delete context[options.id];
-                // Parameterize our own context and resolve the embedded promse with our actual promise.
-                } else {
-                    ctx = context;
-                    embeddedPromise.resolve(promise);
+        return queue;
+    }());
+
+    function makePromise() {
+        var waiting = [], dreading = [], status = "unresolved", value;
+
+        function trigger(value) {
+            var a = status === "resolved" ? waiting : dreading;
+            while (a.length) {
+                a.shift()(value);
+            }
+        }
+
+        return {
+            status: function() {
+                return status;
+            },
+            isResolved: function() {
+                return status !== "unresolved";
+            },
+            resolve: function(v) {
+                if (status !== "unresolved") throw new Error("Cannot resolve a promise that is already resolved.");
+                value = v;
+                status = "resolved";
+                trigger();
+            },
+            error: function(msg) {
+                if (status !== "unresolved") throw new Error("Cannot resolve a promise that is already resolved.");
+                value = msg;
+                status = "error";
+                trigger();
+            },
+            done: function(fn) {
+                if (status === "resolved") {
+                    fn(value);
+                } else if (status === "unresolved") {
+                    waiting.push(fn);
+                }
+            },
+            fail: function(fn) {
+                if (status === "error") {
+                    fn(value);
+                } else if (status === "unresolved") {
+                    dreading.push(fn);
+                }
+            }
+        };
+    }
+
+    function makeContext() {
+        var moduleExports = {}, moduleIdAlias = {};
+
+        return {
+            saveModuleExports: function(moduleId, exports) {
+                if (moduleId in moduleIdAlias) moduleId = moduleIdAlias[moduleId];
+                moduleExports[moduleId] = exports;
+            },
+            removeModuleExports: function(moduleId) {
+                delete moduleExports[moduleId];
+                if (moduleId in moduleIdAlias) moduleId = moduleIdAlias[moduleId];
+                delete moduleExports[moduleId];
+            },
+            getModuleExports: function(moduleId) {
+                if (moduleId in moduleIdAlias) moduleId = moduleIdAlias[moduleId];
+                return moduleExports[moduleId];
+            },
+            containsModuleExports: function(moduleId) {
+                if (moduleId in moduleIdAlias) moduleId = moduleIdAlias[moduleId];
+                return moduleId in moduleExports;
+            },
+            aliasModuleId: function(moduleId, alias) {
+                if (moduleId === alias) return;
+
+                moduleIdAlias[moduleId] = alias;
+
+                if (alias in moduleExports) {
+                    moduleExports[moduleId] = moduleExports[alias];
+                    delete moduleExports[alias];
+                }
+            }
+        };
+    }
+
+    function makeConfig(o) {
+        var config, key, urlArgs;
+
+        config = {
+            baseUrl: "",
+            paths: {},
+            urlArgs: "",
+            timeout: 5000
+        };
+
+        if (!util.isObject(o)) return config;
+
+        /////////////
+        // baseUrl //
+        /////////////
+        if ("baseUrl" in o) {
+            // Ensure the baseUrl ends with '/' if it's not the empty string.
+            if (typeof o.baseUrl === "string" && o.baseUrl.length !== 0) {
+                config.baseUrl = o.baseUrl;
+                if (o.baseUrl.charAt(o.baseUrl.length - 1) !== "/") config.baseUrl += "/";
+            }
+        }
+
+        /////////////
+        // urlArgs //
+        /////////////
+        if ("urlArgs" in o) {
+            // Ensure urlArgs is properly formatted and encoded.
+            if (util.isString(o.urlArgs)) {
+                config.urlArgs = "?" + o.urlArgs.replace(/^\?/, "");
+            } else if (util.isObject(o.urlArgs)) {
+                urlArgs = "";
+
+                for (key in o.urlArgs) {
+                    urlArgs = "&" + key + "=" + encodeURIComponent(o.urlArgs[key] + "");
                 }
 
-                moduleId = options.id || (moduleId || "");
-                importer = lib.define.makeImporter(moduleId, path, options.imports, exports, ctx);
-                importerPromise = importer.run();
+                if (urlArgs.charAt(0) === "&") urlArgs = urlArgs.substring(1);
 
-                if (exports) ctx.set(moduleId, exports);
+                config.urlArgs = urlArgs.length ? "?" + urlArgs : urlArgs;
+            }
+        }
 
-                // Go ahead and import our dependencies.
-                importerPromise.complete(function(imports) {
+        ///////////
+        // paths //
+        ///////////
+        if (util.isObject(o.paths)) config.paths = o.paths;
+
+        /////////////
+        // timeout //
+        /////////////
+        if (!isNaN(o.timeout) && parseFloat(o.timeout) > 0) config.timeout = parseFloat(o.timeout);
+
+        return config;
+    }
+
+    // Loads a JavaScript file by using a <script> element.
+    // onComplete will be called with the URL of the script when the script has loaded.
+    // onError will be called with an error message if the script fails to load.
+    function loadScript(url, onComplete, onError) {
+        var script = document.createElement("script");
+
+        script.onload = function() {
+            script.onload = null;
+            script.onreadystatechange = null;
+            script.onerror = null;
+
+            if (typeof onComplete === "function") onComplete(url);
+        };
+        script.onreadystatechange = function() {
+            if (script.readyState === "complete" || script.readyState === "loaded") {
+                script.onload();
+            }
+        };
+        script.onerror = function() {
+            script.onload = null;
+            script.onreadystatechange = null;
+            script.onerror = null;
+
+            if (typeof onError === "function") onError(new Error("Failed to load script: " + url));
+        };
+
+        script.src = url;
+        document.getElementsByTagName("head")[0].appendChild(script);
+    }
+
+    // Convert a module ID into a qualified URL.
+    function toUrl(moduleId, baseUrl, basePath, paths, urlArgs, ext) {
+        var key, url = moduleId;
+
+        // If no extension is specified then assume '.js'.
+        ext = ext || ".js";
+
+        // Expand path aliases.
+        for (key in paths) {
+            url = url.replace(key, paths[key]);
+        }
+
+        // If the url is absolute or has an extension then we simply return it as is.
+        if ((/^\/|^[a-z]+:/i).test(url) || (/\.[a-z]+$/i).test(url)) return url;
+
+        // Handle relativeness.
+        if (basePath) {
+            if (url.substring(0, 2) === "./") {
+                url = basePath + url.substring(2);
+            } else if (url.substring(0, 3) === "../") {
+                basePath = basePath.split("/");
+                basePath.pop();
+                basePath = basePath.join("/") + basePath.length ? "/" : "";
+                url = basePath + url.substring(3);
+            }
+        }
+
+        // Prepend the baseUrl.
+        url =  baseUrl + url;
+
+        // Append the extesion.
+        url += ext;
+
+        // Append any url arguments.
+        url += urlArgs;
+
+        return url;
+    }
+
+    // Turn a module ID into a path to be used when resolving a module to a URL.
+    function toPath(moduleId, basePath, paths) {
+        var i, s, path = moduleId;
+
+        // Expand path aliases.
+        for (key in paths) {
+            path = path.replace(key, paths[key]);
+        }
+
+        // Handle relativeness.
+        if (basePath) {
+            if (path.substring(0, 2) === "./") {
+                path = basePath + path.substring(2);
+            } else if (path.substring(0, 3) === "../") {
+                basePath = basePath.split("/");
+                basePath.pop();
+                basePath = basePath.join("/") + basePath.length ? "/" : "";
+                path = basePath + path.substring(3);
+            }
+        }
+
+        ///////////////////////////////////////////
+        // Find the path portion of the moduleId //
+        ///////////////////////////////////////////
+
+        i = path.lastIndexOf("/");
+        s = path.substring(0, i+1);
+
+        // If the last '/' is not found in a relative or absolute portion of the path
+        // then we retrieve the path upto and including the last '/'.
+        if (i > 0 && s.search(/^\.\/|^\.\.\/|^[a-z]+:\//i) < 0) {
+            path = path.substring(0, i+1);
+        // If there are no '/' in the path then we set it to the empty string.
+        } else if (i < 0) {
+           path = "";
+        }
+
+        return path;
+    }
+
+    function isCircular(moduleId, currentModuleId, context) {
+        var o;
+
+        if (moduleId in context) {
+            if (moduleId !== currentModuleId) {
+                o = context[moduleId];
+
+                if (o.promise.isResolved()) return false;
+
+                if (o.dependencies.contains(currentModuleId)) return true;
+
+                o.dependencies.forEach(function(k, dep) {
+                    if (isCircular(dep, currentModuleId, context)) return true;
+                });
+            }
+        }
+
+        return false;
+    }
+
+    function makeRequire(basePath, currentModuleId, context, onError) {
+        require = function() {
+            // require([dependencies], callback)
+            if (util.isArray(arguments[0])) {
+                if (util.isFunction(arguments[1])) {
+                    (function(args) {
+                        var deps = args[0], count = deps.length, fn = args[1], imports = [], key;
+
+                        function onComplete(key, xprts) {
+                            if (count) imports[key] = xprts;
+
+                            if (--count === 0) fn.apply(undefined, imports);
+                        }
+
+                        for (key in deps) {
+                            if (typeof deps[key] === "function") continue;
+
+                            loadModule(context, deps[key], currentModuleId, basePath, (function(key) {
+                                return function(xprts) {
+                                    onComplete(key, xprts);
+                                };
+                            }(key)), onError);
+                        }
+                    }(arguments));
+                } else {
+                    throw new Error("TypeError: Expected a callback function.");
+                }
+
+                return;
+            // require(moduleId)
+            } else if (util.isString(arguments[0])) {
+                if (arguments[0] === "require") {
+                    return makeRequire(basePath, currentModuleId, context, onError);
+                }
+
+                if (!context.containsModuleExports(arguments[0])) throw new Error("Module has not been exported into context: " + arguments[0]);
+                return context.getModuleExports(arguments[0]);
+            }
+
+            throw new Error("TypeError: Expected a module ID.");
+        };
+        require.toUrl = function(resource) {
+            var ext, moduleId, config = context.config;
+
+            if (util.isString(resource) && (/\.[a-zA-Z]+$/).test(resource + "")) {
+                resource += "";
+                // Retrieve and remove the extension.
+                ext = resource.match(/\.[a-zA-Z]+$/).pop();
+                moduleId = resource.replace(/\.[a-zA-Z]+$/, "");
+                // Convert to a URL but be sure to preserve the original extension and specify no URL args.
+                return toUrl(resource, config.baseUrl, basePath, config.paths, "", ext);
+            }
+
+            throw new Error("TypeError: Expected a module ID of the form 'module-id.extension'.");
+        };
+
+        return require;
+    }
+
+    // Loads an AMD module by using a <script> element.
+    // onComplete is called with the module exports if the module has successfully loaded.
+    // onError will be called with an error message if the module or any of its
+    // dependencies has failed to load.
+    function loadModule(context, moduleId, currentModuleId, basePath, onComplete, onError) {
+        onComplete = (function(fn) {
+            return function() {
+                if (util.isFunction(fn)) fn.apply(undefined, arguments);
+            };
+        }(onComplete));
+
+        onError = (function(fn) {
+            return function() {
+                if (util.isFunction(fn)) fn.apply(undefined, arguments);
+            };
+        }(onError));
+
+        var moduleUrl = toUrl(moduleId, context.config.baseUrl, basePath, context.config.paths, context.config.urlArgs);
+        var modulePath = toPath(moduleId, basePath, context.config.paths);
+
+        // if the module is 'exported' then we complete with the exports
+        if (context.containsModuleExports(moduleId)) {
+            onComplete(context.getModuleExports(moduleId));
+
+        // else the module is 'loading' already then we complete with undefined (highly likely it's a circular dependency)
+        } else if (moduleUrl in context) {
+            onComplete(undefined);
+
+        // else the module is 'importing' and it's circular then we complete with undefined, otherwise wait for its exports
+        } else if (moduleId in context) {
+            if (isCircular(moduleId, currentModuleId, context)) {
+                onComplete(undefined);
+            } else {
+                context[moduleId].promise.done(onComplete);
+                context[moduleId].promise.fail(onError);
+            }
+
+        // else we load
+        } else {
+            // Define the module as 'loading'.
+            context[moduleUrl] = true;
+
+            // Load the script that has the module definition.
+            loadScript(moduleUrl, function() {
+                // Clear the 'loading' status of the module.
+                delete context[moduleUrl];
+
+                // Import the module's dependencies.
+                // pass the following: context, moduleId, modulePath, moduleUrl
+                queue.dequeue()(context, moduleId, modulePath, moduleUrl, function(exports) {
+                    onComplete(exports);
+                }, function(error) {
+                    onError(error);
+                });
+            }, function(error) {
+                delete context[moduleUrl];
+                onError(error);
+            });
+        }
+    }
+
+    function makeDependencies(dependencies) {
+        var count = 0;
+
+        dependencies = dependencies || [];
+        for (var k in dependencies) {
+            if (dependencies.hasOwnProperty(k)) count += 1;
+        }
+
+        dependencies.count = function() { return count; };
+        dependencies.forEach = function(fn) {
+            for (var key in dependencies) {
+                if (util.isFunction(dependencies[key])) continue;
+                if (dependencies.hasOwnProperty(key)) fn.call(undefined, key, dependencies[key]);
+            }
+        };
+        dependencies.remove = function(key) {
+            delete this[key];
+            count -= 1;
+        },
+        dependencies.contains = function(moduleId) {
+            for (var key in dependencies) {
+                if (dependencies.hasOwnProperty(key) && dependencies[key] === moduleId) return true;
+            }
+
+            return false;
+        };
+
+        return dependencies;
+    }
+
+    function makeImports(asArray) {
+        var commonJs, importedValues;
+
+        importedValues = asArray ? [] : {};
+        commonJs = {
+            exports: null,
+            module: null,
+            require: null
+        };
+
+        return {
+            importCommonJsExports: function(dependencies) {
+                // Look for CommonJS exports dependency and import it.
+                dependencies.forEach(function(key, dep) {
+                    switch (dep) {
+                        case "exports":
+                            importedValues[key] = commonJs.exports = {};
+                            dependencies.remove(key);
+                            break;
+                    }
+                });
+
+                return commonJs.exports;
+            },
+            importCommonJs: function(moduleId, moduleUrl, basePath, context, dependencies) {
+                // Look for CommonJS dependencies and import them.
+                dependencies.forEach(function(key, dep) {
+                    switch (dep) {
+                        case "require":
+                            importedValues[key] = commonJs.require = makeRequire(basePath, moduleId, context, null /*TODO: onError*/);
+                            commonJs.require.main = {id: moduleId, uri: moduleUrl};
+                            dependencies.remove(key);
+                            break;
+                        case "module":
+                            importedValues[key] = commonJs.module = {id: moduleId, uri: moduleUrl};
+                            dependencies.remove(key);
+                            break;
+                    }
+                });
+            },
+            set: function(key, value) {
+                importedValues[key] = value;
+            },
+            valueOf: function() {
+                return importedValues;
+            }
+        };
+    }
+
+    function inspectFunctionForDependencies(factory) {
+        var script, args, arg, i, len, reg, result, deps = [];
+
+        script = factory.toString();
+        args = /^function\s*\((.*?)\)/.exec(script)[1];
+
+        if (args) {
+            args = args.split(",");
+            len = args.length;
+            for (i = 0; i < len; i++) {
+                arg = args[i].replace(/^\s+|\s+$/g, "");
+                switch (arg) {
+                    case "require":
+                    case "exports":
+                    case "module":
+                        deps.push(arg);
+                        break;
+                    default:
+                        throw new Error("Unrecognized dependency '" + arg + "' in script: " + script);
+                }
+            }
+        }
+
+        reg = /require\(('|")(.+?)\1\)/g;
+        result = reg.exec(script);
+
+        while (result) {
+            deps.push(result[2]);
+            result = reg.exec(script);
+        }
+
+        return deps;
+    }
+
+    function makeOptions(args) {
+        var o, options = {
+            moduleId: "",
+            dependencies: makeDependencies()
+        };
+
+        // fn
+        // id, [dependencies], fn | value
+        if (args.length > 1 || util.isFunction(args[0])) {
+            options.moduleId = util.isString(args[0]) ? args.shift() + "" : "";
+            options.factory = (function(fn) {
+                return function(imports, commJsExports) {
                     var result;
 
-                    // Fill out the CommonJS module object.
-                    if (imports.module()) {
-                        imports.module().id = moduleId;
-                        imports.module().uri = url;
-                    }
-
-                    // Give the require it's main property according to CommonJS spec.
-                    if (imports.require()) imports.require().main = {id: moduleId, uri: url};
-
-                    if (typeof options.module === "function") {
-                        try {
-                            result = imports.callFactory(options.module);
-
-                            if (imports.exports()) {
-                                promise.resolve({id: options.id, value: imports.exports()});
-                            } else {
-                                promise.resolve({id: options.id, value: result});
-                            }
-                        } catch (error) {
-                            promise.smash(error);
-
-                            if (typeof errorCallback === "function") {
-                                errorCallback(error);
-                            } else {
-                                throw error;
-                            }
-                        }
-                    } else {
-                        promise.resolve({id: options.id, value: options.module});
-                    }
-                });
-                importerPromise.error(function(value) {
-                    promise.smash(value);
-
-                    lib.util.defer(function() {
-                        if (typeof errorCallback === "function") {
-                            errorCallback(value);
+                    if (util.isFunction(fn)) {
+                        if (util.isArray(imports)) {
+                            result = fn.apply(undefined, imports);
                         } else {
-                            throw value;
+                            result = fn.call(undefined, imports);
                         }
-                    });
-                });
 
-                return promise;
+                        return commJsExports || result;
+                    }
+
+                    return fn;
+                };
+            }(args[args.length - 1]));
+            if (args.length === 2) {
+                options.dependencies = makeDependencies(args[0]);
+            }
+
+            if (options.dependencies.count() === 0 && typeof args[args.length - 1] === "function") {
+                options.dependencies = makeDependencies(inspectFunctionForDependencies(args[args.length - 1]));
+            }
+        // {id, imports, module}
+        } else if (util.isObject(args[0]) && "module" in args[0]) {
+            o = args[0];
+
+            if (util.isString(o.id)) options.moduleId = o.id + "";
+            if (util.isObject(o.imports)) options.dependencies = makeDependencies(o.imports);
+
+            if (options.dependencies.count() === 0 && typeof o.module === "function") {
+                options.dependencies = makeDependencies(inspectFunctionForDependencies(o.module));
+            }
+
+            options.factory = function(imports, commJsExports) {
+                var result;
+
+                if (util.isFunction(o.module)) {
+                    if (util.isArray(imports)) {
+                        result = o.module.apply(undefined, imports);
+                    } else {
+                        result = o.module.call(undefined, imports);
+                    }
+
+                    return commJsExports || result;
+                }
+
+                return o.module;
             };
+        // moduleValue
+        } else {
+            options.factory = function(imports, commJsExports) {
+                return args[0];
+            };
+        }
 
-            queue.enqueue(run);
+        return options;
+    }
 
-            lib.util.defer(function() {
-                // Embedded script detected.
-                if (queue.contains(run)) {
-                    var q = queue.slice();
+    function makeDefine(context) {
+        function define() {
+            var options, dependencies, exports, imports, importingPromise;
+
+            options = makeOptions(Array.prototype.slice.call(arguments));
+            dependencies = options.dependencies;
+            imports = makeImports(util.isArray(dependencies));
+            exports = imports.importCommonJsExports(dependencies);
+            importingPromise = makePromise();
+
+            // Define the module as 'importing'.
+            // This is used by modules that have an explicit ID so that circular dependencies can be detected.
+            if (options.moduleId) {
+                // Test if the module already exists.
+                if (options.moduleId in context) {
+                    globalErrorHanlder.trigger("Module '" + options.moduleId + "' has already been defined.");
+                    // Exit.
+                    return;
+                } else {
+                    // Save our CommonJS exports immediately so that calls to require() can retrieve them.
+                    if (exports) {
+                        context.saveModuleExports(options.moduleId, exports);
+                    } else {
+                        context[options.moduleId] = {promise: importingPromise, dependencies: dependencies};
+                    }
+                }
+            }
+
+            // Enqueue a function that will import our dependencies.
+            // The context here will be our 'parent' context.
+            queue.enqueue(function(parentContext, moduleId, modulePath, moduleUrl, onComplete, onError) {
+                var ctx;
+
+                log("Define:", options.moduleId || (moduleId || "anon"));
+
+                // Override the onError callback so that it can be called this function immediately.
+                onError = (function(fn) {
+                    return function(error) {
+                        delete ctx[moduleId];
+                        if (options.moduleId) delete ctx[options.moduleId];
+
+                        if (util.isFunction(fn)) {
+                            fn(error);
+                            importingPromise.error(error);
+                        } else {
+                            globalErrorHandler.trigger(error);
+                        }
+                    };
+                }(onError));
+
+                // If we are the global 'define' and our 'parent' context is not equal to our own
+                // (i.e. our 'parent' has a custom context) then we clean up lingering
+                // states on the global context and transfer it to our parent context and ensure
+                // we load into our parent context. Transfer over the CommonJS exports as well if it exists.
+                if (define === globalDefine) {
+                    if (parentContext !== context && options.moduleId) {
+                        parentContext[options.moduleId] = context[options.moduleId];
+                        delete context[options.moduleId];
+
+                        // Exports will only be defined at this point if 'exports' is a dependency.
+                        if (exports) {
+                            parentContext.saveModuleExports(options.moduleId, exports);
+                            context.removeModuleExports(options.moduleId);
+                        }
+                    }
+
+                    ctx = parentContext;
+
+                // Else we are a customly created 'define' with its own context, so
+                // we forcefully use our own context.
+                } else {
+                    ctx = context;
+                }
+
+                // Test if the module already exists.
+                if (!exports && (moduleUrl in ctx || ctx.containsModuleExports(moduleId))) {
+                    onError(new Error("Module '" + moduleId + "' has already been defined."));
+                    // Exit.
+                    return;
+                }
+
+                // Attempt to import the CommonJS dependencies (except for 'exports').
+                try {
+                    imports.importCommonJs(moduleId, moduleUrl, modulePath, ctx, dependencies);
+                } catch (error) {
+                    onError(error);
+                    // Exit.
+                    return;
+                }
+
+                // Override the onComplete callback. We do it here so that we can read the proper
+                // 'count' value from our dependencies after the CommonJS dependencies have been imported.
+                onComplete = (function(fn) {
+                    var count = options.dependencies.count();
+
+                    return function(key, xprts) {
+                        // onComplete has been called with exports from a module being loaded.
+                        if (count) {
+                            imports.set(key, xprts);
+                        }
+
+                        if (count === 0 || --count === 0) {
+                            try {
+                                // When all dependencies are imported define the module as 'exported'.
+                                exports = options.factory(imports.valueOf(), exports);
+                                ctx.saveModuleExports(moduleId, exports);
+
+                                // Get rid of our 'importing' state for this module.
+                                if (options.moduleId) delete ctx[options.moduleId];
+                                delete ctx[moduleId];
+
+                                if (util.isFunction(fn)) fn(exports);
+                                importingPromise.resolve(exports);
+                            } catch (error) {
+                                onError(error);
+                            }
+                        }
+                    };
+                }(onComplete));
+
+                // Define the module as 'importing', but use the 'actual' moduleId instead of the explicit moduleId.
+                // This is so that either the explicit ID or the actual ID can used to determine if a module is importing.
+                // This is used to detect circular dependencies.
+                if (!exports) ctx[moduleId] = {promise: importingPromise, dependencies: dependencies};
+
+                // Alias the module ID with the ID explicitly set for this module (if specified).
+                if (options.moduleId) ctx.aliasModuleId(moduleId, options.moduleId);
+
+                // Import our dependencies.
+                if (dependencies.count()) {
+                    dependencies.forEach(function(key, modId) {
+                        loadModule(ctx, modId, moduleId, modulePath, function(xprts) {
+                            onComplete(key, xprts);
+                        }, onError);
+                    });
+                } else {
+                    onComplete();
+                }
+            }); // queue.enqueue(fn)
+
+            // Set a timeout so that in the future we check for any remaining
+            // 'import' callbacks on the queue. These callbacks will be from
+            // embedded scripts on the HTML page. When we rung these callbacks
+            // we use our context so that they are imported into our context.
+            setTimeout(function() {
+                // Import the dependencies for all embedded modules.
+                if (queue.length) {
+                    q = queue.slice();
                     queue.clear();
 
                     while (q.length) {
-                        q.shift()(null, "", "", "");
+                        q.shift()(context, "", "", "");
                     }
                 }
-            });
-        };
-        define.config = function(value) {
-            if (arguments.length) {
-                var cfg = lib.define.makeConfig(value);
+            }, 0);
+        } // define()
 
-                // Copy only the changed values.
-                for (var k in value) {
-                    if (value.hasOwnProperty(k)) {
-                        context.config[k] = cfg[k];
-                    }
-                }
-            }
+        // Hook into the global error handler.
+        define.error = globalErrorHandler.error;
 
-            return context.config;
-        };
+        // Expose the crossbrowser log function.
+        define.log = log;
+
+        // Function to create a new context with its own configuration.
         define.context = function(config) {
-            var ctx = lib.define.makeContext();
-            ctx.config = lib.define.makeConfig(config);
-            return {define: makeDefine(ctx)};
+            var context = makeContext();
+            context.config = makeConfig(config);
+            return {define: makeDefine(context)};
         };
-        define.error = function(callback) {
-            errorCallback = callback;
-        };
+
         define.amd = {
             plugins: false,
             pluginDynamic: false,
@@ -951,16 +866,13 @@ var define = (function(document) {
             depsAsObject: true
         };
 
-        // Save a reference to this define if it's our first time creating one.
-        if (!globalDefine) globalDefine = define;
-
         return define;
-    };
+    }
 
-
-    return (function() {
-        var ctx = lib.define.makeContext();
-        ctx.config = lib.define.makeConfig();
-        return makeDefine(ctx);
+    // Return and create our global 'define'.
+    return globalDefine = (function() {
+        var context = makeContext();
+        context.config = makeConfig();
+        return makeDefine(context);
     }());
-}(document));
+}(document, window, setTimeout, window.navigator.userAgent || ""));
