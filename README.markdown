@@ -109,7 +109,7 @@ Where 'imports' is an object where each key is the name of an import and whose v
 
 
 -----------------------------------------------
-The following signatures offer an object-literal technique, so that the arguments are
+The following signatures offer an object-literal technique, so that the arguments
 are explicitly named and easier to understand when reading code.
 
     define({module: module value | module factory})
