@@ -267,7 +267,7 @@ var define = (function(document, window, setTimeout, userAgent) {
             script.onreadystatechange = null;
             script.onerror = null;
 
-            if (tutil.isFunction(onComplete)) onComplete(url);
+            if (util.isFunction(onComplete)) onComplete(url);
         };
         script.onreadystatechange = function() {
             if (script.readyState === "complete" || script.readyState === "loaded") {
@@ -284,7 +284,7 @@ var define = (function(document, window, setTimeout, userAgent) {
 
         id = setTimeout(function() {
             script.onload = function() {};
-            util.isFunction(onError) onError(new Error("Failed to load script '" + url + "' due to timeout (" + timeout + "ms)."));
+            if (util.isFunction(onError)) onError(new Error("Failed to load script '" + url + "' due to timeout (" + timeout + "ms)."));
         }, timeout);
 
         script.src = url;
