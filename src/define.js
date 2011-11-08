@@ -724,8 +724,6 @@ var define = (function(document, window, setTimeout, userAgent) {
             queue.enqueue(function(parentContext, moduleId, modulePath, moduleUrl, onComplete, onError) {
                 var ctx;
 
-                log("Define:", options.moduleId || (moduleId || "anon"));
-
                 // Override the onError callback so that it can be called this function immediately.
                 onError = (function(fn) {
                     return function(error) {
