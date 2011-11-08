@@ -1,4 +1,4 @@
-var define = (function(document, window, setTimeout, userAgent) {
+var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
     if (window.define) return window.define;
 
     ///////////////////////////
@@ -263,6 +263,8 @@ var define = (function(document, window, setTimeout, userAgent) {
         var script = document.createElement("script"), id;
 
         script.onload = function() {
+            clearTimeout(id);
+
             script.onload = null;
             script.onreadystatechange = null;
             script.onerror = null;
@@ -275,6 +277,8 @@ var define = (function(document, window, setTimeout, userAgent) {
             }
         };
         script.onerror = function() {
+            clearTimeout(id);
+
             script.onload = null;
             script.onreadystatechange = null;
             script.onerror = null;
@@ -884,4 +888,4 @@ var define = (function(document, window, setTimeout, userAgent) {
         context.config = makeConfig();
         return makeDefine(context);
     }());
-}(document, window, setTimeout, window.navigator.userAgent || ""));
+}(document, window, setTimeout, clearTimeout, window.navigator.userAgent || ""));
