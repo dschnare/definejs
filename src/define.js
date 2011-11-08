@@ -710,6 +710,9 @@ var define = (function(document, window, setTimeout, userAgent) {
                     // Save our CommonJS exports immediately so that calls to require() can retrieve them.
                     if (exports) {
                         context.saveModuleExports(options.moduleId, exports);
+
+                    // Otherwise if no CommonJS exports exist then we save a promise and our dependencies
+                    // on the context so that circular dependencies can be detected. This marks the module as 'importing'.
                     } else {
                         context[options.moduleId] = {promise: importingPromise, dependencies: dependencies};
                     }
@@ -810,7 +813,7 @@ var define = (function(document, window, setTimeout, userAgent) {
 
                 // Define the module as 'importing', but use the 'actual' moduleId instead of the explicit moduleId.
                 // This is so that either the explicit ID or the actual ID can used to determine if a module is importing.
-                // This is used to detect circular dependencies.
+                // This is used to detect circular dependencies. We only do this we have not exports (i.e. via CommonJS).
                 if (!exports) ctx[moduleId] = {promise: importingPromise, dependencies: dependencies};
 
                 // Alias the module ID with the ID explicitly set for this module (if specified).
