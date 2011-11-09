@@ -123,7 +123,7 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
     function makePromise() {
         var waiting = [], dreading = [], status = "unresolved", value;
 
-        function trigger(value) {
+        function trigger() {
             var a = status === "resolved" ? waiting : dreading;
             while (a.length) {
                 a.shift()(value);
@@ -458,17 +458,17 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
     // onError will be called with an error message if the module or any of its
     // dependencies has failed to load.
     function loadModule(context, moduleId, currentModuleId, basePath, onComplete, onError) {
-        var moduleUrl, modulePath, config;
+        var moduleUrl, modulePath, config, promise;
 
         onComplete = (function(fn) {
-            return function() {
-                if (util.isFunction(fn)) fn.apply(undefined, arguments);
+            return function(exports) {
+                if (util.isFunction(fn)) fn(exports);
             };
         }(onComplete));
 
         onError = (function(fn) {
-            return function() {
-                if (util.isFunction(fn)) fn.apply(undefined, arguments);
+            return function(error) {
+                if (util.isFunction(fn)) fn(error);
             };
         }(onError));
 
@@ -482,7 +482,9 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
 
         // else the module is 'loading' already then we complete with undefined (highly likely it's a circular dependency)
         } else if (moduleUrl in context) {
-            onComplete(undefined);
+            context[moduleUrl].done(onComplete);
+            context[moduleUrl].fail(onError);
+            //onComplete(undefined);
 
         // else the module is 'importing' and it's circular then we complete with undefined, otherwise wait for its exports
         } else if (moduleId in context) {
@@ -496,7 +498,7 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
         // else we load
         } else {
             // Define the module as 'loading'.
-            context[moduleUrl] = true;
+            context[moduleUrl] = promise = makePromise();
 
             // Load the script that has the module definition.
             loadScript(moduleUrl, config.timeout, function() {
@@ -507,8 +509,10 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
                 // pass the following: context, moduleId, modulePath, moduleUrl
                 queue.dequeue()(context, moduleId, modulePath, moduleUrl, function(exports) {
                     onComplete(exports);
+                    promise.resolve(exports);
                 }, function(error) {
                     onError(error);
+                    promise.error(error);
                 });
             }, function(error) {
                 delete context[moduleUrl];
@@ -879,8 +883,40 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
 
     // Return and create our global 'define'.
     return globalDefine = (function() {
-        var context = makeContext();
-        context.config = makeConfig();
-        return makeDefine(context);
+        var context, define, scripts, i, pattern, scriptText, o, main, config;
+
+        scripts = document.getElementsByTagName("script");
+        i = scripts.length;
+        pattern = /define.*?\.js$/;
+
+        function executeScript(scriptText) {
+            var f = new Function("window", "document", "alert", "console", scriptText);
+            return f.call({});
+        }
+
+        while (i--) {
+            if (pattern.test(scripts[i].src)) {
+                scriptText = scripts[i].innerHTML;
+                scriptText = scriptText.replace(/^\s+|\s+$/g, "");
+                scriptText = "return " + scriptText + ";";
+
+                try {
+                    o = executeScript(scriptText);
+                    config = o ? o.config : null;
+                    main = o ? o.main : null;
+                } catch(ignore) {}
+                break;
+            }
+        }
+
+        context = makeContext();
+        context.config = makeConfig(config);
+        define = makeDefine(context);
+
+        if (main && typeof main === "string") {
+            loadModule(context, main, "", "");
+        }
+
+        return define;
     }());
 }(document, window, setTimeout, clearTimeout, window.navigator.userAgent || ""));
