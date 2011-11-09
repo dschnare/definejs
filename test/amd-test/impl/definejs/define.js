@@ -103,11 +103,11 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
             var operation;
             // Use pop() for Chrome, Safari, and FireFox - Embedded scripts are always executed first.
             // Use shift for IE and Opera - Embedded scripts are always executed last.
-            if(userAgent.search(/safari|chrome|firefox/i) >= 0) {
-                operation = "pop";
-            } else {
+            //if(userAgent.search(/safari|chrome|firefox/i) >= 0) {
+            //    operation = "pop";
+            //} else {
                 operation = "shift";
-            }
+            //}
 
             return function() {
                 return this[operation]();
