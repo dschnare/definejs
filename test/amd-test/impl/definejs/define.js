@@ -123,7 +123,7 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
     function makePromise() {
         var waiting = [], dreading = [], status = "unresolved", value;
 
-        function trigger(value) {
+        function trigger() {
             var a = status === "resolved" ? waiting : dreading;
             while (a.length) {
                 a.shift()(value);
@@ -458,17 +458,17 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
     // onError will be called with an error message if the module or any of its
     // dependencies has failed to load.
     function loadModule(context, moduleId, currentModuleId, basePath, onComplete, onError) {
-        var moduleUrl, modulePath, config;
+        var moduleUrl, modulePath, config, promise;
 
         onComplete = (function(fn) {
-            return function() {
-                if (util.isFunction(fn)) fn.apply(undefined, arguments);
+            return function(exports) {
+                if (util.isFunction(fn)) fn(exports);
             };
         }(onComplete));
 
         onError = (function(fn) {
-            return function() {
-                if (util.isFunction(fn)) fn.apply(undefined, arguments);
+            return function(error) {
+                if (util.isFunction(fn)) fn(error);
             };
         }(onError));
 
@@ -476,13 +476,10 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
         moduleUrl = toUrl(moduleId, config.baseUrl, basePath, config.paths, config.urlArgs);
         modulePath = toPath(moduleId, basePath, config.paths);
 
+
         // if the module is 'exported' then we complete with the exports
         if (context.containsModuleExports(moduleId)) {
             onComplete(context.getModuleExports(moduleId));
-
-        // else the module is 'loading' already then we complete with undefined (highly likely it's a circular dependency)
-        } else if (moduleUrl in context) {
-            onComplete(undefined);
 
         // else the module is 'importing' and it's circular then we complete with undefined, otherwise wait for its exports
         } else if (moduleId in context) {
@@ -493,10 +490,15 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
                 context[moduleId].promise.fail(onError);
             }
 
+        // else the module is 'loading' already then we complete with undefined (highly likely it's a circular dependency)
+        } else if (moduleUrl in context) {
+            context[moduleUrl].done(onComplete);
+            context[moduleUrl].fail(onError);
+
         // else we load
         } else {
             // Define the module as 'loading'.
-            context[moduleUrl] = true;
+            context[moduleUrl] = promise = makePromise();
 
             // Load the script that has the module definition.
             loadScript(moduleUrl, config.timeout, function() {
@@ -507,8 +509,10 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
                 // pass the following: context, moduleId, modulePath, moduleUrl
                 queue.dequeue()(context, moduleId, modulePath, moduleUrl, function(exports) {
                     onComplete(exports);
+                    promise.resolve(exports);
                 }, function(error) {
                     onError(error);
+                    promise.error(error);
                 });
             }, function(error) {
                 delete context[moduleUrl];
@@ -824,7 +828,12 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
                 // Define the module as 'importing', but use the 'actual' moduleId instead of the explicit moduleId.
                 // This is so that either the explicit ID or the actual ID can used to determine if a module is importing.
                 // This is used to detect circular dependencies. We only do this we have not exports (i.e. via CommonJS).
-                if (!exports) ctx[moduleId] = {promise: importingPromise, dependencies: dependencies};
+                if (exports) {
+                    context.saveModuleExports(options.moduleId || moduleId, exports);
+                    delete context[options.moduleId];
+                } else {
+                    ctx[moduleId] = {promise: importingPromise, dependencies: dependencies};
+                }
 
                 // Alias the module ID with the ID explicitly set for this module (if specified).
                 if (options.moduleId) ctx.aliasModuleId(moduleId, options.moduleId);
@@ -879,8 +888,40 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
 
     // Return and create our global 'define'.
     return globalDefine = (function() {
-        var context = makeContext();
-        context.config = makeConfig();
-        return makeDefine(context);
+        var context, define, scripts, i, pattern, scriptText, o, main, config;
+
+        scripts = document.getElementsByTagName("script");
+        i = scripts.length;
+        pattern = /define.*?\.js$/;
+
+        function executeScript(scriptText) {
+            var f = new Function("window", "document", "alert", "console", scriptText);
+            return f.call({});
+        }
+
+        while (i--) {
+            if (pattern.test(scripts[i].src)) {
+                scriptText = scripts[i].innerHTML;
+                scriptText = scriptText.replace(/^\s+|\s+$/g, "");
+                scriptText = "return " + scriptText + ";";
+
+                try {
+                    o = executeScript(scriptText);
+                    config = o ? o.config : null;
+                    main = o ? o.main : null;
+                } catch(ignore) {}
+                break;
+            }
+        }
+
+        context = makeContext();
+        context.config = makeConfig(config);
+        define = makeDefine(context);
+
+        if (main && typeof main === "string") {
+            define([main], null);
+        }
+
+        return define;
     }());
 }(document, window, setTimeout, clearTimeout, window.navigator.userAgent || ""));
