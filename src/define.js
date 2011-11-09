@@ -476,7 +476,6 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
         moduleUrl = toUrl(moduleId, config.baseUrl, basePath, config.paths, config.urlArgs);
         modulePath = toPath(moduleId, basePath, config.paths);
 
-        console.log("loading:", moduleUrl);
 
         // if the module is 'exported' then we complete with the exports
         if (context.containsModuleExports(moduleId)) {
@@ -829,7 +828,12 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
                 // Define the module as 'importing', but use the 'actual' moduleId instead of the explicit moduleId.
                 // This is so that either the explicit ID or the actual ID can used to determine if a module is importing.
                 // This is used to detect circular dependencies. We only do this we have not exports (i.e. via CommonJS).
-                if (!exports) ctx[moduleId] = {promise: importingPromise, dependencies: dependencies};
+                if (exports) {
+                    context.saveModuleExports(options.moduleId || moduleId, exports);
+                    delete context[options.moduleId];
+                } else {
+                    ctx[moduleId] = {promise: importingPromise, dependencies: dependencies};
+                }
 
                 // Alias the module ID with the ID explicitly set for this module (if specified).
                 if (options.moduleId) ctx.aliasModuleId(moduleId, options.moduleId);
@@ -915,7 +919,7 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
         define = makeDefine(context);
 
         if (main && typeof main === "string") {
-            loadModule(context, main, "", "");
+            define([main], null);
         }
 
         return define;
