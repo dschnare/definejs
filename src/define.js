@@ -848,14 +848,9 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
             setTimeout(function() {
                 // Import the dependencies for all embedded modules.
                 if (queue.length) {
-                    q = queue.slice();
-                    queue.clear();
-
-                    while (q.length) {
-                        q.shift()(context, "", "", "");
-                    }
+                    queue.dequeue()(context, "", "", "");
                 }
-            }, 0);
+            }, 10);
         } // define()
 
         // Hook into the global error handler.

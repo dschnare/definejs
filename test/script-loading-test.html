@@ -71,6 +71,7 @@
                 setTimeout(function() {
                     // Import the dependencies for all embedded modules.
                     if (queue.length) {
+                        log("Timedout");
                         while (queue.length) {
                             queue.dequeue()();
                         }

@@ -1,4 +1,4 @@
-define({
+define("browser", {
     window: window,
     document: document,
     navigator: window.navigator,

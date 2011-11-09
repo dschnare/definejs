@@ -1,6 +1,6 @@
 // Exports a function that when called with a function
 // will call the specified function when the DOM is ready.
-define(['browser'], function(browser) {
+define("dom-ready", ['browser'], function(browser) {
     "use strict";
 
     var ready, document, window, DOMContentLoaded, callbacks;

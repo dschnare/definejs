@@ -1,4 +1,4 @@
-var define = (function(document, window, setTimeout, userAgent) {
+var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
     if (window.define) return window.define;
 
     ///////////////////////////
@@ -259,15 +259,17 @@ var define = (function(document, window, setTimeout, userAgent) {
     // Loads a JavaScript file by using a <script> element.
     // onComplete will be called with the URL of the script when the script has loaded.
     // onError will be called with an error message if the script fails to load.
-    function loadScript(url, onComplete, onError) {
-        var script = document.createElement("script");
+    function loadScript(url, timeout, onComplete, onError) {
+        var script = document.createElement("script"), id;
 
         script.onload = function() {
+            clearTimeout(id);
+
             script.onload = null;
             script.onreadystatechange = null;
             script.onerror = null;
 
-            if (typeof onComplete === "function") onComplete(url);
+            if (util.isFunction(onComplete)) onComplete(url);
         };
         script.onreadystatechange = function() {
             if (script.readyState === "complete" || script.readyState === "loaded") {
@@ -275,12 +277,19 @@ var define = (function(document, window, setTimeout, userAgent) {
             }
         };
         script.onerror = function() {
+            clearTimeout(id);
+
             script.onload = null;
             script.onreadystatechange = null;
             script.onerror = null;
 
-            if (typeof onError === "function") onError(new Error("Failed to load script: " + url));
+            if (util.isFunction(onError)) onError(new Error("Failed to load script: " + url));
         };
+
+        id = setTimeout(function() {
+            script.onload = function() {};
+            if (util.isFunction(onError)) onError(new Error("Failed to load script '" + url + "' due to timeout (" + timeout + "ms)."));
+        }, timeout);
 
         script.src = url;
         document.getElementsByTagName("head")[0].appendChild(script);
@@ -449,6 +458,8 @@ var define = (function(document, window, setTimeout, userAgent) {
     // onError will be called with an error message if the module or any of its
     // dependencies has failed to load.
     function loadModule(context, moduleId, currentModuleId, basePath, onComplete, onError) {
+        var moduleUrl, modulePath, config;
+
         onComplete = (function(fn) {
             return function() {
                 if (util.isFunction(fn)) fn.apply(undefined, arguments);
@@ -461,8 +472,9 @@ var define = (function(document, window, setTimeout, userAgent) {
             };
         }(onError));
 
-        var moduleUrl = toUrl(moduleId, context.config.baseUrl, basePath, context.config.paths, context.config.urlArgs);
-        var modulePath = toPath(moduleId, basePath, context.config.paths);
+        config = context.config;
+        moduleUrl = toUrl(moduleId, config.baseUrl, basePath, config.paths, config.urlArgs);
+        modulePath = toPath(moduleId, basePath, config.paths);
 
         // if the module is 'exported' then we complete with the exports
         if (context.containsModuleExports(moduleId)) {
@@ -487,7 +499,7 @@ var define = (function(document, window, setTimeout, userAgent) {
             context[moduleUrl] = true;
 
             // Load the script that has the module definition.
-            loadScript(moduleUrl, function() {
+            loadScript(moduleUrl, config.timeout, function() {
                 // Clear the 'loading' status of the module.
                 delete context[moduleUrl];
 
@@ -710,6 +722,9 @@ var define = (function(document, window, setTimeout, userAgent) {
                     // Save our CommonJS exports immediately so that calls to require() can retrieve them.
                     if (exports) {
                         context.saveModuleExports(options.moduleId, exports);
+
+                    // Otherwise if no CommonJS exports exist then we save a promise and our dependencies
+                    // on the context so that circular dependencies can be detected. This marks the module as 'importing'.
                     } else {
                         context[options.moduleId] = {promise: importingPromise, dependencies: dependencies};
                     }
@@ -720,8 +735,6 @@ var define = (function(document, window, setTimeout, userAgent) {
             // The context here will be our 'parent' context.
             queue.enqueue(function(parentContext, moduleId, modulePath, moduleUrl, onComplete, onError) {
                 var ctx;
-
-                log("Define:", options.moduleId || (moduleId || "anon"));
 
                 // Override the onError callback so that it can be called this function immediately.
                 onError = (function(fn) {
@@ -810,7 +823,7 @@ var define = (function(document, window, setTimeout, userAgent) {
 
                 // Define the module as 'importing', but use the 'actual' moduleId instead of the explicit moduleId.
                 // This is so that either the explicit ID or the actual ID can used to determine if a module is importing.
-                // This is used to detect circular dependencies.
+                // This is used to detect circular dependencies. We only do this we have not exports (i.e. via CommonJS).
                 if (!exports) ctx[moduleId] = {promise: importingPromise, dependencies: dependencies};
 
                 // Alias the module ID with the ID explicitly set for this module (if specified).
@@ -835,14 +848,9 @@ var define = (function(document, window, setTimeout, userAgent) {
             setTimeout(function() {
                 // Import the dependencies for all embedded modules.
                 if (queue.length) {
-                    q = queue.slice();
-                    queue.clear();
-
-                    while (q.length) {
-                        q.shift()(context, "", "", "");
-                    }
+                    queue.dequeue()(context, "", "", "");
                 }
-            }, 0);
+            }, 10);
         } // define()
 
         // Hook into the global error handler.
@@ -875,4 +883,4 @@ var define = (function(document, window, setTimeout, userAgent) {
         context.config = makeConfig();
         return makeDefine(context);
     }());
-}(document, window, setTimeout, window.navigator.userAgent || ""));
+}(document, window, setTimeout, clearTimeout, window.navigator.userAgent || ""));

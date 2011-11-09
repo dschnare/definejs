@@ -4,19 +4,16 @@
         <title> new document </title>
         <meta charset="utf-8">
         <script type="text/javascript" src="../src/define.js"></script>
+    </head>
+    <body>
         <script>
-            define.config({
+            define.context({
                 baseUrl: "../src/"
-            });
-
-            define(["dom-ready"], function(domReady) {
+            }).define("test", ["dom-ready"], function(domReady) {
                 domReady(function() {
-                    document.write("DOM is ready");
+                    define.log("DOM is ready");
                 });
             });
         </script>
-    </head>
-
-    <body>
     </body>
 </html>

@@ -19,7 +19,7 @@ var config = function(o) {
 
 
         define.error(function(error) {
-            console.log(error.stack);
+            console.log(error, error.stack);
         });
 
 //Remove the global require, to make sure a global require is not assumed
