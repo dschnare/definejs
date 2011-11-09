@@ -476,15 +476,11 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
         moduleUrl = toUrl(moduleId, config.baseUrl, basePath, config.paths, config.urlArgs);
         modulePath = toPath(moduleId, basePath, config.paths);
 
+        console.log("loading:", moduleUrl);
+
         // if the module is 'exported' then we complete with the exports
         if (context.containsModuleExports(moduleId)) {
             onComplete(context.getModuleExports(moduleId));
-
-        // else the module is 'loading' already then we complete with undefined (highly likely it's a circular dependency)
-        } else if (moduleUrl in context) {
-            context[moduleUrl].done(onComplete);
-            context[moduleUrl].fail(onError);
-            //onComplete(undefined);
 
         // else the module is 'importing' and it's circular then we complete with undefined, otherwise wait for its exports
         } else if (moduleId in context) {
@@ -494,6 +490,11 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
                 context[moduleId].promise.done(onComplete);
                 context[moduleId].promise.fail(onError);
             }
+
+        // else the module is 'loading' already then we complete with undefined (highly likely it's a circular dependency)
+        } else if (moduleUrl in context) {
+            context[moduleUrl].done(onComplete);
+            context[moduleUrl].fail(onError);
 
         // else we load
         } else {
