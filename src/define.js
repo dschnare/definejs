@@ -273,6 +273,8 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
         if (config.paths) {
             config.paths = util.object.create(config.paths);
         }
+
+        return config;
     };
 
     // Loads a JavaScript file by using a <script> element.
