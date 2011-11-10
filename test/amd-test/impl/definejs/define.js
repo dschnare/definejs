@@ -70,6 +70,13 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
         isObject: function(o) {
             if (o === null || o === undefined) return false;
             return typeof o === "object";
+        },
+        object: {
+            create: function(o) {
+                function F() {}
+                F.prototype = o;
+                return new F();
+            }
         }
     };
 
@@ -425,8 +432,11 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
                 return;
             // require(moduleId)
             } else if (util.isString(arguments[0])) {
-                if (arguments[0] === "require") {
-                    return makeRequire(basePath, currentModuleId, context, onError);
+                switch (arguments[0]) {
+                    case "require":
+                        return makeRequire(basePath, currentModuleId, context, onError);
+                    case "config":
+                        return util.object.create(context.config);
                 }
 
                 if (!context.containsModuleExports(arguments[0])) throw new Error("Module has not been exported into context: " + arguments[0]);
