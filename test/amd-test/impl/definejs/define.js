@@ -260,6 +260,11 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
         /////////////
         if (!isNaN(o.timeout) && parseFloat(o.timeout) > 0) config.timeout = parseFloat(o.timeout);
 
+        // Copy all remaining, potentially custom properties into the config.
+        for (key in o) {
+            if (!(key in config)) config[key] = o[key];
+        }
+
         return config;
     }
 
