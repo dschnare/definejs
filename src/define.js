@@ -267,6 +267,13 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
 
         return config;
     }
+    makeConfig.immutable = function(config) {
+        config = util.object.create(config);
+
+        if (config.paths) {
+            config.paths = util.object.create(config.paths);
+        }
+    };
 
     // Loads a JavaScript file by using a <script> element.
     // onComplete will be called with the URL of the script when the script has loaded.
@@ -441,7 +448,7 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
                     case "require":
                         return makeRequire(basePath, currentModuleId, context, onError);
                     case "config":
-                        return util.object.create(context.config);
+                        return makeConfig.immutable(context.config);
                 }
 
                 if (!context.containsModuleExports(arguments[0])) throw new Error("Module has not been exported into context: " + arguments[0]);
