@@ -106,9 +106,20 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
         queue.enqueue = function(o) {
             this.push(o);
         };
-        queue.dequeue = function() {
-        	return this.shift();
-       	},
+        queue.dequeue = (function() {
+            var operation;
+            // Use pop() for Chrome, Safari, and FireFox - Embedded scripts are always executed first.
+            // Use shift for IE and Opera - Embedded scripts are always executed last.
+            //if(userAgent.search(/safari|chrome|firefox/i) >= 0) {
+            //    operation = "pop";
+            //} else {
+                operation = "shift";
+            //}
+
+            return function() {
+                return this[operation]();
+            };
+        }());
         queue.clear = function() {
             while (this.length) this.pop();
         };
@@ -535,34 +546,29 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
     }
 
     function makeDependencies(dependencies) {
-        dependencies = util.isArray(dependencies) ? dependencies.slice() : [];
-        
-        var count = dependencies.length;
-        
-        dependencies.count = function() {
-        	return count;
-        };
-        
+        var count = 0;
+
+        dependencies = dependencies || [];
+        for (var k in dependencies) {
+            if (dependencies.hasOwnProperty(k)) count += 1;
+        }
+
+        dependencies.count = function() { return count; };
         dependencies.forEach = function(fn) {
-        	for (var key in this) {
-        		if (typeof this[key] === "function") continue;
-        		fn.call(undefined, key, this[key]);
-        	}
-        };
-        
-        dependencies.remove = function(index) {
-        	if (index in this) {
-        		delete this[index];
-        		count -= 1;
-        	}
-        };
-        
-        dependencies.contains = function(moduleId) {        	
-            for (var key in this) {
-                if (typeof this[key] === "function") continue;
-                if (this[key] === moduleId) return true;
+            for (var key in dependencies) {
+                if (util.isFunction(dependencies[key])) continue;
+                if (dependencies.hasOwnProperty(key)) fn.call(undefined, key, dependencies[key]);
             }
-            
+        };
+        dependencies.remove = function(key) {
+            delete this[key];
+            count -= 1;
+        },
+        dependencies.contains = function(moduleId) {
+            for (var key in dependencies) {
+                if (dependencies.hasOwnProperty(key) && dependencies[key] === moduleId) return true;
+            }
+
             return false;
         };
 
@@ -679,7 +685,6 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
                     return fn;
                 };
             }(args[args.length - 1]));
-            
             if (args.length === 2) {
                 options.dependencies = makeDependencies(args[0]);
             }
@@ -687,6 +692,32 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
             if (options.dependencies.count() === 0 && typeof args[args.length - 1] === "function") {
                 options.dependencies = makeDependencies(inspectFunctionForDependencies(args[args.length - 1]));
             }
+        // {id, imports, module}
+        } else if (util.isObject(args[0]) && "module" in args[0]) {
+            o = args[0];
+
+            if (util.isString(o.id)) options.moduleId = o.id + "";
+            if (util.isObject(o.imports)) options.dependencies = makeDependencies(o.imports);
+
+            if (options.dependencies.count() === 0 && typeof o.module === "function") {
+                options.dependencies = makeDependencies(inspectFunctionForDependencies(o.module));
+            }
+
+            options.factory = function(imports, commJsExports) {
+                var result;
+
+                if (util.isFunction(o.module)) {
+                    if (util.isArray(imports)) {
+                        result = o.module.apply(undefined, imports);
+                    } else {
+                        result = o.module.call(undefined, imports);
+                    }
+
+                    return commJsExports || result;
+                }
+
+                return o.module;
+            };
         // moduleValue
         } else {
             options.factory = function(imports, commJsExports) {
@@ -707,7 +738,7 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
             exports = imports.importCommonJsExports(dependencies);
             importingPromise = makePromise();
 
-            // Define the module as 'importing' if it is given an explicit ID.
+            // Define the module as 'importing'.
             // This is used by modules that have an explicit ID so that circular dependencies can be detected.
             if (options.moduleId) {
                 // Test if the module already exists.
@@ -716,7 +747,7 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
                     // Exit.
                     return;
                 } else {
-                    // Save our CommonJS exports (if they exist) immediately so that calls to require() can retrieve them.
+                    // Save our CommonJS exports immediately so that calls to require() can retrieve them.
                     if (exports) {
                         context.saveModuleExports(options.moduleId, exports);
 
@@ -733,7 +764,7 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
             queue.enqueue(function(parentContext, moduleId, modulePath, moduleUrl, onComplete, onError) {
                 var ctx;
 
-                // Override the onError callback so that it can be called immediately.
+                // Override the onError callback so that it can be called this function immediately.
                 onError = (function(fn) {
                     return function(error) {
                         delete ctx[moduleId];
@@ -772,8 +803,7 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
                     ctx = context;
                 }
 
-                // If we don't have exports yet, then test if the module already exists.
-                // We will only have exports at this point if CommonJS exports are a dependency.
+                // Test if the module already exists.
                 if (!exports && (moduleUrl in ctx || ctx.containsModuleExports(moduleId))) {
                     onError(new Error("Module '" + moduleId + "' has already been defined."));
                     // Exit.
@@ -790,7 +820,7 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
                 }
 
                 // Override the onComplete callback. We do it here so that we can read the proper
-                // 'length' value from our dependencies after the CommonJS dependencies have been imported.
+                // 'count' value from our dependencies after the CommonJS dependencies have been imported.
                 onComplete = (function(fn) {
                     var count = options.dependencies.count();
 
@@ -873,7 +903,8 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
             plugins: false,
             pluginDynamic: false,
             multiversion: true,
-            defaultDeps: false
+            defaultDeps: false,
+            depsAsObject: true
         };
 
         return define;
@@ -883,20 +914,15 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
     return globalDefine = (function() {
         var context, define, scripts, i, pattern, scriptText, o, main, config;
 
-		// Grab all script elements.
         scripts = document.getElementsByTagName("script");
         i = scripts.length;
         pattern = /define.*?\.js$/;
 
-		// Helper to execute script text in a secure manner.
         function executeScript(scriptText) {
             var f = new Function("window", "document", "alert", "console", scriptText);
             return f.call({});
         }
 
-		// Iterate over all script elements to find the 'definejs' script.
-		// Once found, we take the contents of the script element and execute it as a function.
-		// The script contents should be a JSON object so the function will return the object.
         while (i--) {
             if (pattern.test(scripts[i].src)) {
                 scriptText = scripts[i].innerHTML;
@@ -912,13 +938,10 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
             }
         }
 
-		// Setup the context for the global define, but use the config object
-		// from the JSON object (if defined).
         context = makeContext();
         context.config = makeConfig(config);
         define = makeDefine(context);
 
-		// Import the 'main' application module if one is defined.
         if (main && typeof main === "string") {
             define([main], null);
         }
