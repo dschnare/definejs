@@ -290,6 +290,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         document.getElementsByTagName("head")[0].appendChild(script);
     }
     
+    // Determines if a module ID is valid.
     function isModuleIdValid(moduleId) {
     	var key, chars, char, validCharsRegExp, fileExtensionLikeRegExp, emptyTermExp;
     	
@@ -318,6 +319,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
     isModuleIdValid.FILE_EXTENSION_LIKE_REGEXP = /.[^\/]/;
     isModuleIdValid.EMPTY_TERM_REGEXP = /\/\//;
     
+    // Resolve a module ID relative to the specified relative ID. If module ID is not relative, then returns module ID unchanged.
     function resolveModuleId(moduleId, relativeModuleId) {
         if (moduleId.substring(0, 2) === "./") {
             moduleId = (relativeModuleId ? "/" : "") + moduleId.substring(2);
@@ -365,6 +367,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         return url;
     }
 
+	// Determines if moduleId has a circular dependency on currentModuleId.
     function isCircular(moduleId, currentModuleId, context) {
         var o;
 
@@ -385,6 +388,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         return false;
     }
 
+	// Creates a CommonJS 'require' function.
     function makeRequire(relativeModuleId, context, onError) {
         require = function() {
             // require([dependencies], callback)
