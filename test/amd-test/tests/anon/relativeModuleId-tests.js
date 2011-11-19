@@ -10,7 +10,7 @@ go(["require", "array"], function(require, array) {
             [
                 function relativeModuleId(t){
                     t.is("impl/array", array.name);
-                    t.is("impl/util", array.utilName);
+                    t.is("util", array.utilName);
                 }
             ]
         );
