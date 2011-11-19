@@ -1,4 +1,4 @@
-var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
+var define = (function(document, window, setTimeout, clearTimeout) {
     if (window.define) return window.define;
 
     ///////////////////////////
@@ -944,4 +944,4 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
 
         return define;
     }());
-}(document, window, setTimeout, clearTimeout, window.navigator.userAgent || ""));
+}(document, window, setTimeout, clearTimeout));
