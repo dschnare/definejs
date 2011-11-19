@@ -306,11 +306,28 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
     }
 
     // Convert a module ID into a qualified URL.
-    function toUrl(moduleId, baseUrl, basePath, paths, urlArgs, ext) {
-        var key, url = moduleId;
+    function toUrl(moduleId, relativeModuleId, baseUrl, paths, urlArgs, ext) {
+        var key, url = '';
 
         // If no extension is specified then assume '.js'.
         ext = ext || ".js";
+        
+        // Handle relativeness.
+        if (relativeModuleId) {
+            if (moduleId.substring(0, 2) === "./") {
+                url = relativeModuleId + "/" + moduleId.substring(2);
+            } else if (url.substring(0, 3) === "../") {
+            	url = (function() {
+            		var rel, segments;
+            		
+            		segments = relativeModulid.split("/");
+	                segments.pop();
+	                
+    	            rel = segments.join("/") + segments.length ? "/" : "";
+        	        return rel + moduleId.substring(3);
+            	}());
+            }
+        }
 
         // Expand path aliases.
         for (key in paths) {
@@ -319,18 +336,6 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
 
         // If the url is absolute or has an extension then we simply return it as is.
         if ((/^\/|^[a-z]+:/i).test(url) || (/\.[a-z]+$/i).test(url)) return url;
-
-        // Handle relativeness.
-        if (basePath) {
-            if (url.substring(0, 2) === "./") {
-                url = basePath + url.substring(2);
-            } else if (url.substring(0, 3) === "../") {
-                basePath = basePath.split("/");
-                basePath.pop();
-                basePath = basePath.join("/") + basePath.length ? "/" : "";
-                url = basePath + url.substring(3);
-            }
-        }
 
         // Prepend the baseUrl.
         url =  baseUrl + url;
@@ -732,6 +737,9 @@ var define = (function(document, window, setTimeout, clearTimeout, userAgent) {
             // The context here will be our 'parent' context.
             queue.enqueue(function(parentContext, moduleId, modulePath, moduleUrl, onComplete, onError) {
                 var ctx;
+                
+                // use the explicit module ID or the module ID used to load this module.
+                moduleId = options.moduleId || moduleId;
 
                 // Override the onError callback so that it can be called immediately.
                 onError = (function(fn) {
