@@ -319,6 +319,24 @@ var define = (function(document, window, setTimeout, clearTimeout) {
     isModuleIdValid.FILE_EXTENSION_LIKE_REGEXP = /[^\/].[^\/]/;
     isModuleIdValid.EMPTY_TERM_REGEXP = /\/\//;
     
+    // Determines if a module ID is suitable for use for an explicit module ID.
+    // Example: define(someId, ...)
+    function isValidExplicitModuleId(moduleId) {
+    	if (isValidModuleId(moduleId)) {
+    		// Cannot be relative.
+    		if (moduleId.substring(0, 2) === "./") return false;
+    		if (moduleId.substring(0, 3) === "../") return false;
+    		// Cannot contain a protocol.
+    		if (moduleId.search(/a-z+:/i) >= 0) return false;
+    		// Must be top-level or absolute.
+    		if (moduleId.lastIndexOf("/") > 0 && moduleId.charAt(0) !== "/") return false;
+    		
+    		return true;
+    	}
+    	
+    	return false;
+    }
+    
     // Resolve a module ID relative to the specified relative ID. If module ID is not relative, then returns module ID unchanged.
     function resolveModuleId(moduleId, relativeModuleId) {
 		var rel, segments;
@@ -723,7 +741,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
             // Define the module as 'importing' if it is given an explicit ID.
             // This is used by modules that have an explicit ID so that circular dependencies can be detected.
             if (options.moduleId) {
-            	if (isModuleIdValid(options.moduleId)) {        
+            	if (isValidExplicitModuleId(options.moduleId)) {        
 	                // Test if the module already exists.
                 	if (options.moduleId in context) {
             	        globalErrorHanlder.trigger("Module '" + options.moduleId + "' has already been defined.");
@@ -741,7 +759,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
                     	}
                 	}
                 } else {
-                	globalErrorHandler.trigger(new Error("Invalid module ID: " + options.moduleId));
+                	globalErrorHandler.trigger(new Error("Invalid explicit module ID: " + options.moduleId));
                 	// Exit.
                 	return;
                 }
