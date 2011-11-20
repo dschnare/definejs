@@ -315,24 +315,24 @@ var define = (function(document, window, setTimeout, clearTimeout) {
     	
     	return true;
     }
-    isModuleIdValid.VALID_CHARS_REGEXP = /[a-z0-9_\/\.]/i;
-    isModuleIdValid.FILE_EXTENSION_LIKE_REGEXP = /.[^\/]/;
+    isModuleIdValid.VALID_CHARS_REGEXP = /[a-z0-9_\-\/\.]/i;
+    isModuleIdValid.FILE_EXTENSION_LIKE_REGEXP = /[^\/].[^\/]/;
     isModuleIdValid.EMPTY_TERM_REGEXP = /\/\//;
     
     // Resolve a module ID relative to the specified relative ID. If module ID is not relative, then returns module ID unchanged.
     function resolveModuleId(moduleId, relativeModuleId) {
-        if (moduleId.substring(0, 2) === "./") {
-            moduleId = (relativeModuleId ? "/" : "") + moduleId.substring(2);
-        } else if (moduleId.substring(0, 3) === "../") {
-           	moduleId = (function() {
-            	var rel, segments;
+		var rel, segments;
             		
-            	segments = relativeModulid.split("/");
-	            segments.pop();
-	                
-    	        rel = segments.join("/") + (segments.length ? "/" : "");
-        	    return rel + moduleId.substring(3);
-            }());
+		segments = relativeModulid.split("/");
+		segments.pop();
+		rel = segments.join("/") + (segments.length ? "/" : "");
+    
+        if (moduleId.substring(0, 2) === "./") {
+            moduleId = rel + moduleId.substring(2);
+        } else if (moduleId.substring(0, 3) === "../") {
+        	segments.pop();
+			rel = segments.join("/") + (segments.length ? "/" : "");
+           	moduleId = rel + moduleId.substring(3);
         }
         
         return moduleId;
