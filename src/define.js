@@ -349,7 +349,10 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         
         // Expand path aliases.
         for (key in paths) {
-            moduleId = moduleId.replace(key, paths[key]);
+        	if (moduleId.indexOf(key) === 0) {
+        		moduleId = moduleId.replace(key, paths[key]);
+        		break;
+        	}
         }
 
         // If the moduleId is absolute or has an extension then we simply return it as is.
