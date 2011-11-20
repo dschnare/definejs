@@ -319,7 +319,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
     isModuleIdValid.FILE_EXTENSION_LIKE_REGEXP = /[^\/].[^\/]/;
     isModuleIdValid.EMPTY_TERM_REGEXP = /\/\//;
     
-    // Determines if a module ID is suitable for use for an explicit module ID.
+    // Determines if a module ID is suitable for use as an explicit module ID.
     // Example: define(someId, ...)
     function isValidExplicitModuleId(moduleId) {
     	if (isValidModuleId(moduleId)) {
