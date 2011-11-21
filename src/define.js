@@ -667,13 +667,13 @@ var define = (function(document, window, setTimeout, clearTimeout) {
 
         // id?, dependencies?, fn
         if (args.length > 1) {
-        	var id, deps, factory;
+        	var id, deps, factory, EMPTY_DEPS = [];
         	
         	id = util.isString(args[0]) ? args.shift() + "" : "";
-        	deps = util.isArray(args[0]) ? args.shift() : [];
+        	deps = util.isArray(args[0]) ? args.shift().slice() : EMPTY_DEPS;
         	factory = args.pop();
         	
-        	if (!util.isFunction(factory)) {
+        	if (deps === EMPTY_DEPS && !util.isFunction(factory)) {
         		throw new Error("Expected a module factory function, instead got '" + factory + "'.");
         	}
         
