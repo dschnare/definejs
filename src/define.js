@@ -576,10 +576,10 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         return dependencies;
     }
 
-    function makeImports(asArray) {
+    function makeImports() {
         var commonJs, importedValues;
 
-        importedValues = asArray ? [] : {};
+        importedValues = [];
         commonJs = {
             exports: null,
             module: null,
@@ -734,7 +734,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
             }
             
             dependencies = options.dependencies;
-            imports = makeImports(util.isArray(dependencies));
+            imports = makeImports();
             exports = imports.importCommonJsExports(dependencies);
             importingPromise = makePromise();
 
