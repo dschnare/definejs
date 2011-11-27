@@ -108,7 +108,26 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         };
         queue.dequeue = function() {
         	return this.shift();
-       	},
+       	};
+		queue.contains = function(o) {
+			var i, len = this.length;
+
+			for (i = 0; i < len; i++) {
+				if (this[i] === o) return true;
+			}
+
+			return false;
+		};
+		queue.remove = function(o) {
+			var i, len = this.length;
+
+			for (i = 0; i < len; i++) {
+				if (this[i] === o) {
+					this.splice(i, 1);
+					break;
+				}
+			}
+		};
         queue.clear = function() {
             while (this.length) this.pop();
         };
@@ -289,62 +308,60 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         script.src = url;
         document.getElementsByTagName("head")[0].appendChild(script);
     }
-    
+
     // Determines if a module ID is valid.
     function isModuleIdValid(moduleId) {
     	var key, chars, char, validCharsRegExp, fileExtensionLikeRegExp, emptyTermExp;
-    	
+
     	validCharsRegExp = isModuleIdValid.VALID_CHARS_REGEXP;
     	fileExtensionLikeRegExp = isModuleIdValid.FILE_EXTENSION_LIKE_REGEXP;
     	emptyTermRegExp = isModuleIdValid.EMPTY_TERM_REGEXP;
     	chars = moduleId.split("");
-    	
+
     	for (key in chars) {
     		char = chars[key];
-    		
+
     		if (typeof char !== "string") continue;
-    		
+
     		if (!validCharsRegExp.test(char)) return false;
     	}
-    	
+
     	// Module ID contains a file extension-like pattern.
     	if (moduleId.search(fileExtensionLikeRegExp) > 0) return false;
-    	
+
     	// Module ID contains an empty term.
-    	if (module.search(emptyTermRegExp) >= 0) return false;
-    	
+    	if (moduleId.search(emptyTermRegExp) >= 0) return false;
+
     	return true;
     }
     isModuleIdValid.VALID_CHARS_REGEXP = /[a-z0-9_\-\/\.]/i;
     isModuleIdValid.FILE_EXTENSION_LIKE_REGEXP = /[^\/].[^\/]/;
     isModuleIdValid.EMPTY_TERM_REGEXP = /\/\//;
-    
+
     // Determines if a module ID is suitable for use as an explicit module ID.
     // Example: define(someId, ...)
     function isValidExplicitModuleId(moduleId) {
-    	if (isValidModuleId(moduleId)) {
+    	if (isModuleIdValid(moduleId)) {
     		// Cannot be relative.
     		if (moduleId.substring(0, 2) === "./") return false;
     		if (moduleId.substring(0, 3) === "../") return false;
     		// Cannot contain a protocol.
     		if (moduleId.search(/a-z+:/i) >= 0) return false;
-    		// Must be top-level or absolute.
-    		if (moduleId.lastIndexOf("/") > 0 && moduleId.charAt(0) !== "/") return false;
-    		
+
     		return true;
     	}
-    	
+
     	return false;
     }
-    
+
     // Resolve a module ID relative to the specified relative ID. If module ID is not relative, then returns module ID unchanged.
     function resolveModuleId(moduleId, relativeModuleId) {
 		var rel, segments;
-            		
-		segments = relativeModulid.split("/");
+
+		segments = relativeModuleId.split("/");
 		segments.pop();
 		rel = segments.join("/") + (segments.length ? "/" : "");
-    
+
         if (moduleId.substring(0, 2) === "./") {
             moduleId = rel + moduleId.substring(2);
         } else if (moduleId.substring(0, 3) === "../") {
@@ -352,7 +369,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
 			rel = segments.join("/") + (segments.length ? "/" : "");
            	moduleId = rel + moduleId.substring(3);
         }
-        
+
         return moduleId;
     }
 
@@ -362,9 +379,9 @@ var define = (function(document, window, setTimeout, clearTimeout) {
 
         // If no extension is specified then assume '.js'.
         ext = ext || ".js";
-        
+
         moduleId = resolveModuleId(moduleId, relativeModuleId);
-        
+
         // Expand path aliases.
         for (key in paths) {
         	if (moduleId.indexOf(key) === 0) {
@@ -456,8 +473,8 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         };
         require.toUrl = (function() {
         	var EXTENSION_REGEXP = /\.[a-zA-Z0-9_]+$/;
-        	
-        	function(resource) {
+
+        	return function(resource) {
     	        var ext, moduleId, config = context.config;
 
 	            if (util.isString(resource) && (EXTENSION_REGEXP).test(resource)) {
@@ -479,7 +496,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
     // onComplete is called with the module exports if the module has successfully loaded.
     // onError will be called with an error message if the module or any of its
     // dependencies has failed to load.
-    function loadModule(context, moduleId, relativeModuleId, basePath, onComplete, onError) {
+    function loadModule(context, moduleId, relativeModuleId, onComplete, onError) {
         var resolvedModuleId, moduleUrl, config, promise;
 
         onComplete = (function(fn) {
@@ -543,33 +560,33 @@ var define = (function(document, window, setTimeout, clearTimeout) {
 
     function makeDependencies(dependencies) {
         dependencies = util.isArray(dependencies) ? dependencies.slice() : [];
-        
+
         var count = dependencies.length;
-        
+
         dependencies.count = function() {
         	return count;
         };
-        
+
         dependencies.forEach = function(fn) {
         	for (var key in this) {
         		if (typeof this[key] === "function") continue;
         		fn.call(undefined, key, this[key]);
         	}
         };
-        
+
         dependencies.remove = function(index) {
         	if (index in this) {
         		delete this[index];
         		count -= 1;
         	}
         };
-        
-        dependencies.contains = function(moduleId) {        	
+
+        dependencies.contains = function(moduleId) {
             for (var key in this) {
                 if (typeof this[key] === "function") continue;
                 if (this[key] === moduleId) return true;
             }
-            
+
             return false;
         };
 
@@ -634,6 +651,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         if (args) {
             args = args.split(",");
             len = args.length;
+
             for (i = 0; i < len; i++) {
                 arg = args[i].replace(/^\s+|\s+$/g, "");
                 switch (arg) {
@@ -660,70 +678,57 @@ var define = (function(document, window, setTimeout, clearTimeout) {
     }
 
     function makeOptions(args) {
-        var o, options = {
+        var o, factory, options = {
             moduleId: "",
             dependencies: makeDependencies()
         };
 
-        // id?, dependencies?, fn
+        // id?, dependencies?, fn | value
         if (args.length > 1) {
-        	var id, deps, factory, EMPTY_DEPS = [];
-        	
+        	var id, deps, EMPTY_DEPS = [];
+
         	id = util.isString(args[0]) ? args.shift() + "" : "";
         	deps = util.isArray(args[0]) ? args.shift().slice() : EMPTY_DEPS;
         	factory = args.pop();
-        	
-        	if (deps === EMPTY_DEPS && !util.isFunction(factory)) {
+
+        	if (deps !== EMPTY_DEPS && !util.isFunction(factory)) {
         		throw new Error("Expected a module factory function, instead got '" + factory + "'.");
         	}
-        
+
             options.moduleId = id;
-            
-            options.factory = function(imports, commJsExports) {
-                var result;
 
-                if (util.isArray(imports)) {
-                    result = factory.apply(undefined, imports);
-                } else {
-                    result = factory.call(undefined, imports);
-                }
-
-                return commJsExports || result;
-            };
-            
             options.dependencies = makeDependencies(deps);
-
-            if (options.dependencies.count() === 0) {
-                options.dependencies = makeDependencies(inspectFunctionForDependencies(factory));
-            }
-        // moduleValue
+        // fn | value
         } else {
-            options.factory = (function(fn) {
-                return function(imports, commJsExports) {
-                    var result;
-
-                    if (util.isFunction(fn)) {
-                        if (util.isArray(imports)) {
-                            result = fn.apply(undefined, imports);
-                        } else {
-                            result = fn.call(undefined, imports);
-                        }
-
-                        return commJsExports || result;
-                    }
-
-					// Return 'fn' (i.e. the module value).
-                    return fn;
-                };
-            }(args.pop()));
+			factory = args.pop();
         }
+
+		options.factory = function(imports, commJsExports) {
+			var result;
+
+			if (util.isFunction(factory)) {
+				if (util.isArray(imports)) {
+					result = factory.apply(undefined, imports);
+				} else {
+					result = factory.call(undefined, imports);
+				}
+
+				return commJsExports || result;
+			}
+
+			return factory;
+		};
+
+		if (options.dependencies.count() === 0 && util.isFunction(factory)) {
+			options.dependencies = makeDependencies(inspectFunctionForDependencies(factory));
+		}
 
         return options;
     }
 
     function makeDefine(context) {
         function define() {
-            var options, dependencies, exports, imports, importingPromise;
+            var options, dependencies, exports, imports, importingPromise, callback;
 
 			try {
             	options = makeOptions(Array.prototype.slice.call(arguments));
@@ -732,7 +737,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
             	// Exit.
             	return;
             }
-            
+
             dependencies = options.dependencies;
             imports = makeImports();
             exports = imports.importCommonJsExports(dependencies);
@@ -741,7 +746,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
             // Define the module as 'importing' if it is given an explicit ID.
             // This is used by modules that have an explicit ID so that circular dependencies can be detected.
             if (options.moduleId) {
-            	if (isValidExplicitModuleId(options.moduleId)) {        
+            	if (isValidExplicitModuleId(options.moduleId)) {
 	                // Test if the module already exists.
                 	if (options.moduleId in context) {
             	        globalErrorHanlder.trigger("Module '" + options.moduleId + "' has already been defined.");
@@ -767,9 +772,9 @@ var define = (function(document, window, setTimeout, clearTimeout) {
 
             // Enqueue a function that will import our dependencies.
             // The context here will be our 'parent' context.
-            queue.enqueue(function(parentContext, moduleId, moduleUrl, onComplete, onError) {
+            queue.enqueue(callback = function(parentContext, moduleId, moduleUrl, onComplete, onError) {
                 var ctx;
-                
+
                 // use the explicit module ID or the module ID used to load this module.
                 moduleId = options.moduleId || moduleId;
 
@@ -777,7 +782,6 @@ var define = (function(document, window, setTimeout, clearTimeout) {
                 onError = (function(fn) {
                     return function(error) {
                         delete ctx[moduleId];
-                        if (options.moduleId) delete ctx[options.moduleId];
 
                         if (util.isFunction(fn)) {
                             fn(error);
@@ -881,17 +885,14 @@ var define = (function(document, window, setTimeout, clearTimeout) {
                 }
             }); // queue.enqueue(fn)
 
-            // Set a timeout so that in the future we check for any remaining
-            // 'import' callbacks on the queue. These callbacks will be from
-            // embedded scripts on the HTML page. When we run these callbacks
-            // we use our context so that they are imported into it. We also
-            // specify an empty string for the moduleId and moduleUrl.
+            // Set a timeout so that in the future we check to see if our callback is still
+			// in the queue and if it is then we remove it from the queue and call it immediately.
             setTimeout(function() {
-                // Import the dependencies for all embedded modules.
-                if (queue.length) {
-                    queue.dequeue()(context, "", "");
+                if (queue.contains(callback)) {
+					queue.remove(callback);
+                    callback(context, "", "");
                 }
-            }, 10);
+            }, 1);
         } // define()
 
         // Hook into the global error handler.
@@ -951,7 +952,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
                 	er.nestedError = e;
                 	throw er;
                 }
-                
+
                 break;
             }
         }

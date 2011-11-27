@@ -7,9 +7,13 @@
     </head>
     <body>
         <script>
+			define.error(function(error) {
+				console.log(error);
+			});
+
             define.context({
                 baseUrl: "../src/"
-            }).define("test", ["dom-ready"], function(domReady) {
+            }).define("test/sub", ["dom-ready"], function(domReady) {
                 domReady(function() {
                     define.log("DOM is ready");
                 });
