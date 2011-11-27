@@ -30,7 +30,7 @@ The following browsers have been tested:
 
 -   IE 6/7/8/9 and IE10 testdrive
 -   Chrome 15+
--   FF 7+
+-   FF 3+
 -   Safari 5.1
 -   Opera 10+
 
