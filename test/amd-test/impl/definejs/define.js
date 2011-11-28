@@ -1,3 +1,10 @@
+/*!
+ * Author: Darren Schnare
+ * Version: 1.0
+ * Keywords: javascript,amd,browser,pure,lightweight
+ * License: MIT ( http://www.opensource.org/licenses/mit-license.php )
+ * Repo: https://github.com/dschnare/definejs
+ */
 var define = (function(document, window, setTimeout, clearTimeout) {
     if (window.define) return window.define;
 
