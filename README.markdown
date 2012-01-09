@@ -1,7 +1,5 @@
 >   Author: Darren Schnare
 
->	Version: 1.0
-
 >   Keywords: javascript,amd,browser,pure,lightweight
 
 >   License: MIT ( http://www.opensource.org/licenses/mit-license.php )
