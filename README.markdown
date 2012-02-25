@@ -66,7 +66,7 @@ define.amd property
         plugins: false, // no plugin support
         pluginDynamic: false, // no dynamic plugin support
         multiversion: true, // support for loading multiple versions of a module
-        defaultDeps: false, // there are no default dependencies like the AMD spec suggests
+        defaultDeps: false // there are no default dependencies like the AMD spec suggests
     }
 
 The `defaultDeps` property is defined to make developers aware that definejs does not set `["require", "exports", "module"]` as
