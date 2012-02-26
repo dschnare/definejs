@@ -66,7 +66,10 @@ define.amd property
         plugins: false, // no plugin support
         pluginDynamic: false, // no dynamic plugin support
         multiversion: true, // support for loading multiple versions of a module
-        defaultDeps: false // there are no default dependencies like the AMD spec suggests
+        defaultDeps: false, // there are no default dependencies like the AMD spec suggests
+        jQuery: true // required to load jQuery 1.7+ as a module
+        // (definejs does nothing special to manage multiple versions of jQuery, it is the
+        //	developer's responsibility to create separate contexts when appropriate)
     }
 
 The `defaultDeps` property is defined to make developers aware that definejs does not set `["require", "exports", "module"]` as
