@@ -66,56 +66,8 @@ define.amd property
         plugins: false, // no plugin support
         pluginDynamic: false, // no dynamic plugin support
         multiversion: true, // support for loading multiple versions of a module
-        defaultDeps: false, // there are no default dependencies like the AMD spec suggests
-        depsAsObject: true // support for dependencies to be sepcified as an object
+        defaultDeps: false // there are no default dependencies like the AMD spec suggests
     }
 
 The `defaultDeps` property is defined to make developers aware that definejs does not set `["require", "exports", "module"]` as
 default dependencies when no dependencies are specified.
-
-
-Addendum to AMD
---------------------
-
-Definejs has taken the liberty to introduce a few new signatuers to the `define()` function specified by AMD.
-The typical signatures for `define()` still work as defined in the specification, but definejs provides the
-following additional signatures:
-
-`define({imports}, module value | module factory)`
------------------------------------------------
-
-Where 'imports' is an object where each key is the name of an import and whose value is a dependent module ID.
-
-    define({a: 'a', b: 'b'}, function(imports) {
-      return {
-        /* imports.a and imports.b are the module values from loading 'a' and 'b' */
-        /* module properties */
-      };
-    });
-
-
-`define(module ID, {imports}, module value | module factory)`
------------------------------------------------
-
- Where 'imports' is an object where each key is the name of an import and whose value is a dependent module ID.
-
-    define('myModule', {a: 'a', b: 'b'}, function(imports) {
-      return {
-        /* imports.a and imports.b are the module values from loading 'a' and 'b' */
-        /* module properties */
-      };
-    });
-
-
-
------------------------------------------------
-The following signatures offer an object-literal technique, so that the arguments
-are explicitly named and easier to understand when reading code.
-
-    define({module: module value | module factory})
-
-    define({id: module ID, module: module value | module factory})
-
-    define({imports: {imports}, module: module value | module factory})
-
-    define({id: module ID, imports: {imports}, module: module value | module factory})
