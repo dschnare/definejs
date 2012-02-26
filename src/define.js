@@ -382,7 +382,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
 
     // Convert a module ID into a qualified URL.
     function toUrl(moduleId, relativeModuleId, baseUrl, paths, urlArgs, ext) {
-        var key, url = '';
+        var key, url = '', reg = new RegExp("\\" + ext + "$", "i");
 
         // If no extension is specified then assume '.js'.
         ext = ext || ".js";
@@ -398,7 +398,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         }
 
         // If the moduleId is absolute or has an extension then we simply return it as is.
-        if ((/^\/|^[a-z]+:/i).test(moduleId) || (/\.[a-z0-9_]+$/i).test(moduleId)) return moduleId;
+        if ((/^\/|^[a-z]+:/i).test(moduleId) || reg.test(moduleId)) return moduleId;
 
         // Prepend the baseUrl.
         url =  baseUrl + moduleId;
@@ -919,7 +919,9 @@ var define = (function(document, window, setTimeout, clearTimeout) {
             plugins: false,
             pluginDynamic: false,
             multiversion: true,
-            defaultDeps: false
+            defaultDeps: false,
+            // Necessary to load jQuery 1.7+.
+            jQuery: true
         };
 
         return define;
