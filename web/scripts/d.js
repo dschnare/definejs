@@ -1,1 +1,0 @@
-define("d", ["scripts/g.js"]);
