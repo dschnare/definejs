@@ -1,14 +1,19 @@
-// Exports a function that when called with a function
-// will call the specified function when the DOM is ready.
-define("dom-ready", ['browser'], function(browser) {
+// A module that exports a single function that accepts a function as an argument.
+// The function specified will only be called when the DOM has completely been loaded,
+// or will be called immediately if the DOM has already been loaded. The implementation
+// of this module comes directly from the jQuery implementation of `domReady` event. In
+// fact the source was copied from jQuery and converted to an AMD module.
+/*global 'define'*/
+define("dom-ready", ['browser'], function (browser) {
     "use strict";
 
-    var ready, document, window, DOMContentLoaded, callbacks;
+    var ready, document, window, setTimeout, DOMContentLoaded, callbacks, toplevel;
 
     callbacks = [];
     ready = false;
     document = browser.document;
     window = browser.window;
+    setTimeout = browser.setTimeout;
 
     function onReady() {
         // Make sure body exists, at least, in case IE gets a little overzealous.
@@ -22,7 +27,7 @@ define("dom-ready", ['browser'], function(browser) {
 
         var i, len = callbacks.length;
 
-        for (i = 0; i < len; i++) {
+        for (i = 0; i < len; i += 1) {
             callbacks[i].call(document);
         }
 
@@ -31,13 +36,15 @@ define("dom-ready", ['browser'], function(browser) {
 
     // The DOM ready check for Internet Explorer
     function doScrollCheck() {
-        if (ready) return;
+        if (ready) {
+            return;
+        }
 
         try {
             // If IE is used, use the trick by Diego Perini
             // http://javascript.nwbox.com/IEContentLoaded/
             document.documentElement.doScroll("left");
-        } catch(e) {
+        } catch (e) {
             setTimeout(doScrollCheck, 1);
             return;
         }
@@ -48,13 +55,13 @@ define("dom-ready", ['browser'], function(browser) {
 
     // Cleanup functions for the document ready method
     if (document.addEventListener) {
-        DOMContentLoaded = function() {
+        DOMContentLoaded = function () {
             document.removeEventListener("DOMContentLoaded", DOMContentLoaded, false);
             onReady();
         };
 
     } else if (document.attachEvent) {
-        DOMContentLoaded = function() {
+        DOMContentLoaded = function () {
             // Make sure body exists, at least, in case IE gets a little overzealous (ticket #5443).
             if (document.readyState === "complete") {
                 document.detachEvent("onreadystatechange", DOMContentLoaded);
@@ -87,23 +94,23 @@ define("dom-ready", ['browser'], function(browser) {
 
             // If IE and not a frame
             // continually check to see if the document is ready
-            var toplevel = false;
+            toplevel = false;
 
             try {
-                toplevel = window.frameElement == null;
-            } catch(e) {}
+                toplevel = window.frameElement === null;
+            } catch (e) {}
 
-            if ( document.documentElement.doScroll && toplevel ) {
+            if (document.documentElement.doScroll && toplevel) {
                 doScrollCheck();
             }
         }
     }
 
-    return function(fn) {
+    return function (fn) {
         if (ready) {
             fn.call(document);
         } else if (typeof fn === "function") {
             callbacks.push(fn);
         }
-    }
+    };
 });

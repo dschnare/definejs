@@ -5,23 +5,31 @@
  * License: MIT ( http://www.opensource.org/licenses/mit-license.php )
  * Repo: https://github.com/dschnare/definejs
  */
-var define = (function(document, window, setTimeout, clearTimeout) {
-    if (window.define) return window.define;
+/*jslint forin: true, continue: true, regexp: true, evil: true*/
+/*global 'define', 'document', 'window', 'setTimeout', 'clearTimeout' */
+var define = (function (document, window, setTimeout, clearTimeout) {
+    'use strict';
+
+    if (window.define && window.define.amd) {
+        return window.define;
+    }
 
     ///////////////////////////
     // Cross Browser Logging //
     ///////////////////////////
     function log() {
         // Turn off logging when in production mode.
-        if (log.prod) return;
+        if (log.prod) {
+            return;
+        }
 
         var i, len, arg, br, text, space, container, frag;
 
         container = log.getContainer() || log.buffer;
         frag = document.createDocumentFragment();
-        space = function() { return document.createTextNode(" "); };
-        br = function() { return document.createElement("br"); };
-        text = function(text) { return document.createTextNode(text + ""); };
+        space = function () { return document.createTextNode(" "); };
+        br = function () { return document.createElement("br"); };
+        text = function (text) { return document.createTextNode(text === undefined ? 'undefined' : text.toString()); };
         len = arguments.length;
 
         if (container !== log.buffer && log.buffer) {
@@ -29,7 +37,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
             log.buffer = null;
         }
 
-        for (i = 0; i < len; i++) {
+        for (i = 0; i < len; i += 1) {
             frag.appendChild(text(arguments[i]));
             frag.appendChild(space());
         }
@@ -41,7 +49,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
     }
     log.prod = false;
     log.buffer = document.createDocumentFragment();
-    log.defer = function() {
+    log.defer = function () {
         var container = log.getContainer();
 
         if (!container) {
@@ -51,35 +59,47 @@ var define = (function(document, window, setTimeout, clearTimeout) {
             log.buffer = null;
         }
     };
-    log.getContainer = function() {
+    log.getContainer = function () {
         return document.body;
     };
 
 
 
 
-    var globalDefine, queue, util, globalErrorHandler, Array, String;
+    var globalDefine, queue, util, globalErrorHandler, Array, String, json_parse;
 
     Array = ([]).constructor;
     String = ("").constructor;
 
     // Utility functions.
     util = {
-        isFunction: function(o) {
+        isFunction: function (o) {
             return typeof o === "function";
         },
-        isArray: function(o) {
+        isArray: function (o) {
             return ({}).toString.call(o) === "[object Array]";
         },
-        isString: function(o) {
+        isString: function (o) {
             return o instanceof String || typeof o === "string";
         },
-        isObject: function(o) {
-            if (o === null || o === undefined) return false;
+        isObject: function (o) {
+            if (o === null || o === undefined) {
+                return false;
+            }
             return typeof o === "object";
         },
+        toString: function (o) {
+            return o === undefined ? 'undefined' : o.toString();
+        },
+        hasOwnProperty: (function () {
+            var hasOwnProperty = Object.prototype.hasOwnProperty;
+
+            return function (o, key) {
+                return hasOwnProperty.call(o, key);
+            };
+        }()),
         object: {
-            create: function(o) {
+            create: function (o) {
                 function F() {}
                 F.prototype = o;
                 return new F();
@@ -88,21 +108,23 @@ var define = (function(document, window, setTimeout, clearTimeout) {
     };
 
     // The global error handler.
-    globalErrorHandler = (function() {
+    globalErrorHandler = (function () {
         var dreading = [];
 
         return {
-            error: function(fn) {
-                if (util.isFunction(fn)) dreading.push(fn);
+            error: function (fn) {
+                if (util.isFunction(fn)) {
+                    dreading.push(fn);
+                }
             },
-            trigger: function(error) {
+            trigger: function (error) {
                 var i, len = dreading.length;
 
                 if (len === 0) {
                     throw error;
                 }
 
-                for (i = 0; i < len; i++) {
+                for (i = 0; i < len; i += 1) {
                     dreading[i](error);
                 }
             }
@@ -112,35 +134,39 @@ var define = (function(document, window, setTimeout, clearTimeout) {
     //////////////////////////////////////
     // The Module Import Callback Queue //
     //////////////////////////////////////
-    queue = (function() {
+    queue = (function () {
         var queue = [];
-        queue.enqueue = function(o) {
+        queue.enqueue = function (o) {
             this.push(o);
         };
-        queue.dequeue = function() {
+        queue.dequeue = function () {
             return this.shift();
         };
-        queue.contains = function(o) {
+        queue.contains = function (o) {
             var i, len = this.length;
 
-            for (i = 0; i < len; i++) {
-                if (this[i] === o) return true;
+            for (i = 0; i < len; i += 1) {
+                if (this[i] === o) {
+                    return true;
+                }
             }
 
             return false;
         };
-        queue.remove = function(o) {
+        queue.remove = function (o) {
             var i, len = this.length;
 
-            for (i = 0; i < len; i++) {
+            for (i = 0; i < len; i += 1) {
                 if (this[i] === o) {
                     this.splice(i, 1);
                     break;
                 }
             }
         };
-        queue.clear = function() {
-            while (this.length) this.pop();
+        queue.clear = function () {
+            while (this.length) {
+                this.pop();
+            }
         };
 
         return queue;
@@ -157,32 +183,36 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         }
 
         return {
-            status: function() {
+            status: function () {
                 return status;
             },
-            isResolved: function() {
+            isResolved: function () {
                 return status !== "unresolved";
             },
-            resolve: function(v) {
-                if (status !== "unresolved") throw new Error("Cannot resolve a promise that is already resolved.");
+            resolve: function (v) {
+                if (status !== "unresolved") {
+                    throw new Error("Cannot resolve a promise that is already resolved.");
+                }
                 value = v;
                 status = "resolved";
                 trigger();
             },
-            error: function(msg) {
-                if (status !== "unresolved") throw new Error("Cannot resolve a promise that is already resolved.");
+            error: function (msg) {
+                if (status !== "unresolved") {
+                    throw new Error("Cannot resolve a promise that is already resolved.");
+                }
                 value = msg;
                 status = "error";
                 trigger();
             },
-            done: function(fn) {
+            done: function (fn) {
                 if (status === "resolved") {
                     fn(value);
                 } else if (status === "unresolved") {
                     waiting.push(fn);
                 }
             },
-            fail: function(fn) {
+            fail: function (fn) {
                 if (status === "error") {
                     fn(value);
                 } else if (status === "unresolved") {
@@ -196,17 +226,17 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         var moduleExports = {};
 
         return {
-            saveModuleExports: function(moduleId, exports) {
+            saveModuleExports: function (moduleId, exports) {
                 moduleExports[moduleId] = exports;
             },
-            removeModuleExports: function(moduleId) {
+            removeModuleExports: function (moduleId) {
                 delete moduleExports[moduleId];
             },
-            getModuleExports: function(moduleId) {
+            getModuleExports: function (moduleId) {
                 return moduleExports[moduleId];
             },
-            containsModuleExports: function(moduleId) {
-                return moduleId in moduleExports;
+            containsModuleExports: function (moduleId) {
+                return util.hasOwnProperty(moduleExports, moduleId);
             }
         };
     }
@@ -221,23 +251,27 @@ var define = (function(document, window, setTimeout, clearTimeout) {
             timeout: 5000
         };
 
-        if (!util.isObject(o)) return config;
+        if (!util.isObject(o)) {
+            return config;
+        }
 
         /////////////
         // baseUrl //
         /////////////
-        if ("baseUrl" in o) {
+        if (util.hasOwnProperty(o, "baseUrl")) {
             // Ensure the baseUrl ends with '/' if it's not the empty string.
             if (typeof o.baseUrl === "string" && o.baseUrl.length !== 0) {
                 config.baseUrl = o.baseUrl;
-                if (o.baseUrl.charAt(o.baseUrl.length - 1) !== "/") config.baseUrl += "/";
+                if (o.baseUrl.charAt(o.baseUrl.length - 1) !== "/") {
+                    config.baseUrl += "/";
+                }
             }
         }
 
         /////////////
         // urlArgs //
         /////////////
-        if ("urlArgs" in o) {
+        if (util.hasOwnProperty(o, "urlArgs")) {
             // Ensure urlArgs is properly formatted and encoded.
             if (util.isString(o.urlArgs)) {
                 config.urlArgs = "?" + o.urlArgs.replace(/^\?/, "");
@@ -245,10 +279,14 @@ var define = (function(document, window, setTimeout, clearTimeout) {
                 urlArgs = "";
 
                 for (key in o.urlArgs) {
-                    urlArgs = "&" + key + "=" + encodeURIComponent(o.urlArgs[key] + "");
+                    if (typeof o.urlArgs[key] !== 'function') {
+                        urlArgs = "&" + key + "=" + encodeURIComponent(util.toString(o.urlArgs[key]));
+                    }
                 }
 
-                if (urlArgs.charAt(0) === "&") urlArgs = urlArgs.substring(1);
+                if (urlArgs.charAt(0) === "&") {
+                    urlArgs = urlArgs.substring(1);
+                }
 
                 config.urlArgs = urlArgs.length ? "?" + urlArgs : urlArgs;
             }
@@ -257,21 +295,27 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         ///////////
         // paths //
         ///////////
-        if (util.isObject(o.paths)) config.paths = o.paths;
+        if (util.isObject(o.paths)) {
+            config.paths = o.paths;
+        }
 
         /////////////
         // timeout //
         /////////////
-        if (!isNaN(o.timeout) && parseFloat(o.timeout) > 0) config.timeout = parseFloat(o.timeout);
+        if (!isNaN(o.timeout) && parseFloat(o.timeout) > 0) {
+            config.timeout = parseFloat(o.timeout);
+        }
 
         // Copy all remaining, potentially custom properties into the config.
         for (key in o) {
-            if (!(key in config)) config[key] = o[key];
+            if (!util.hasOwnProperty(config, key)) {
+                config[key] = o[key];
+            }
         }
 
         return config;
     }
-    makeConfig.immutable = function(config) {
+    makeConfig.immutable = function (config) {
         config = util.object.create(config);
 
         if (config.paths) {
@@ -287,33 +331,39 @@ var define = (function(document, window, setTimeout, clearTimeout) {
     function loadScript(url, timeout, onComplete, onError) {
         var script = document.createElement("script"), id;
 
-        script.onload = function() {
+        script.onload = function () {
             clearTimeout(id);
 
             script.onload = null;
             script.onreadystatechange = null;
             script.onerror = null;
 
-            if (util.isFunction(onComplete)) onComplete(url);
+            if (util.isFunction(onComplete)) {
+                onComplete(url);
+            }
         };
-        script.onreadystatechange = function() {
+        script.onreadystatechange = function () {
             if (script.readyState === "complete" || script.readyState === "loaded") {
                 script.onload();
             }
         };
-        script.onerror = function() {
+        script.onerror = function () {
             clearTimeout(id);
 
             script.onload = null;
             script.onreadystatechange = null;
             script.onerror = null;
 
-            if (util.isFunction(onError)) onError(new Error("Failed to load script: " + url));
+            if (util.isFunction(onError)) {
+                onError(new Error("Failed to load script: " + url));
+            }
         };
 
-        id = setTimeout(function() {
-            script.onload = function() {};
-            if (util.isFunction(onError)) onError(new Error("Failed to load script '" + url + "' due to timeout (" + timeout + "ms)."));
+        id = setTimeout(function () {
+            script.onload = function () {};
+            if (util.isFunction(onError)) {
+                onError(new Error("Failed to load script '" + url + "' due to timeout (" + timeout + "ms)."));
+            }
         }, timeout);
 
         script.src = url;
@@ -322,7 +372,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
 
     // Determines if a module ID is valid.
     function isModuleIdValid(moduleId) {
-        var key, chars, char, validCharsRegExp, fileExtensionLikeRegExp, emptyTermExp;
+        var key, chars, char, validCharsRegExp, fileExtensionLikeRegExp, emptyTermRegExp;
 
         validCharsRegExp = isModuleIdValid.VALID_CHARS_REGEXP;
         fileExtensionLikeRegExp = isModuleIdValid.FILE_EXTENSION_LIKE_REGEXP;
@@ -332,16 +382,24 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         for (key in chars) {
             char = chars[key];
 
-            if (typeof char !== "string") continue;
+            if (typeof char !== "string") {
+                continue;
+            }
 
-            if (!validCharsRegExp.test(char)) return false;
+            if (!validCharsRegExp.test(char)) {
+                return false;
+            }
         }
 
         // Module ID contains a file extension-like pattern.
-        if (moduleId.search(fileExtensionLikeRegExp) > 0) return false;
+        if (moduleId.search(fileExtensionLikeRegExp) > 0) {
+            return false;
+        }
 
         // Module ID contains an empty term.
-        if (moduleId.search(emptyTermRegExp) >= 0) return false;
+        if (moduleId.search(emptyTermRegExp) >= 0) {
+            return false;
+        }
 
         return true;
     }
@@ -354,10 +412,16 @@ var define = (function(document, window, setTimeout, clearTimeout) {
     function isValidExplicitModuleId(moduleId) {
         if (isModuleIdValid(moduleId)) {
             // Cannot be relative.
-            if (moduleId.substring(0, 2) === "./") return false;
-            if (moduleId.substring(0, 3) === "../") return false;
+            if (moduleId.substring(0, 2) === "./") {
+                return false;
+            }
+            if (moduleId.substring(0, 3) === "../") {
+                return false;
+            }
             // Cannot contain a protocol.
-            if (moduleId.search(/a-z+:/i) >= 0) return false;
+            if (moduleId.search(/a-z+:/i) >= 0) {
+                return false;
+            }
 
             return true;
         }
@@ -385,7 +449,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
     }
 
     function regExpEscape(str) {
-        return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+        return str.replace(/[\-\[\]{}()*+?.,\\\^$|#\s]/g, "\\$&");
     }
 
     // Convert a module ID into a qualified URL.
@@ -398,12 +462,14 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         moduleId = resolveModuleId(moduleId, relativeModuleId);
 
         // Expand path aliases.
-        if (moduleId in paths) {
+        if (util.hasOwnProperty(paths, moduleId)) {
             moduleId = paths[moduleId];
         }
 
         // If the moduleId is absolute or has an extension then we simply return it as is.
-        if ((/^\/|^[a-z]+:/i).test(moduleId) || reg.test(moduleId)) return moduleId;
+        if ((/^\/|^[a-z]+:/i).test(moduleId) || reg.test(moduleId)) {
+            return moduleId;
+        }
 
         // Prepend the baseUrl.
         url =  baseUrl + moduleId;
@@ -421,16 +487,22 @@ var define = (function(document, window, setTimeout, clearTimeout) {
     function isCircular(moduleId, currentModuleId, context) {
         var o;
 
-        if (moduleId in context) {
+        if (util.hasOwnProperty(context, moduleId)) {
             if (moduleId !== currentModuleId) {
                 o = context[moduleId];
 
-                if (o.promise.isResolved()) return false;
+                if (o.promise.isResolved()) {
+                    return false;
+                }
 
-                if (o.dependencies.contains(currentModuleId)) return true;
+                if (o.dependencies.contains(currentModuleId)) {
+                    return true;
+                }
 
-                o.dependencies.forEach(function(k, dep) {
-                    if (isCircular(dep, currentModuleId, context)) return true;
+                o.dependencies.forEach(function (k, dep) {
+                    if (isCircular(dep, currentModuleId, context)) {
+                        return true;
+                    }
                 });
             }
         }
@@ -438,55 +510,137 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         return false;
     }
 
+    // Loads an AMD module by using a <script> element.
+    // onComplete is called with the module exports if the module has successfully loaded.
+    // onError will be called with an error message if the module or any of its
+    // dependencies has failed to load.
+    function loadModule(context, moduleId, relativeModuleId, onComplete, onError) {
+        var resolvedModuleId, moduleUrl, config, promise;
+
+        onComplete = (function (fn) {
+            return function (exports) {
+                if (util.isFunction(fn)) {
+                    fn(exports);
+                }
+            };
+        }(onComplete));
+
+        onError = (function (fn) {
+            return function (error) {
+                if (util.isFunction(fn)) {
+                    fn(error);
+                }
+            };
+        }(onError));
+
+        config = context.config;
+        moduleUrl = toUrl(moduleId, relativeModuleId, config.baseUrl, config.paths, config.urlArgs);
+
+        // if the module is 'exported' then we complete with the exports
+        if (context.containsModuleExports(moduleId)) {
+            onComplete(context.getModuleExports(moduleId));
+
+        // else the module is 'importing' and it's circular then we complete with undefined, otherwise wait for its exports
+        } else if (util.hasOwnProperty(context, moduleId)) {
+            if (isCircular(moduleId, relativeModuleId, context)) {
+                onComplete(undefined);
+            } else {
+                context[moduleId].promise.done(onComplete);
+                context[moduleId].promise.fail(onError);
+            }
+
+        // else the module is 'loading' already then we listen to its promise
+        } else if (util.hasOwnProperty(context, moduleUrl)) {
+            context[moduleUrl].done(onComplete);
+            context[moduleUrl].fail(onError);
+
+        // else we load
+        } else {
+            // Define the module as 'loading'.
+            context[moduleUrl] = promise = makePromise();
+
+            // Load the script that has the module definition.
+            loadScript(moduleUrl, config.timeout, function () {
+                // Clear the 'loading' status of the module.
+                delete context[moduleUrl];
+
+                // Import the module's dependencies.
+                // pass the following: context, moduleId, moduleUrl
+                queue.dequeue()(context, moduleId, moduleUrl, function (exports) {
+                    onComplete(exports);
+                    promise.resolve(exports);
+                }, function (error) {
+                    onError(error);
+                    promise.error(error);
+                });
+            }, function (error) {
+                delete context[moduleUrl];
+                onError(error);
+            });
+        }
+    }
+
     // Creates a CommonJS 'require' function.
     function makeRequire(relativeModuleId, context, onError) {
-        require = function() {
+        var require = function (arg1, arg2) {
             // require([dependencies], callback)
-            if (util.isArray(arguments[0])) {
-                if (util.isFunction(arguments[1])) {
-                    (function(args) {
-                        var deps = args[0], count = deps.length, fn = args[1], imports = [], key;
+            if (util.isArray(arg1)) {
+                if (util.isFunction(arg2)) {
+                    (function (deps, fn) {
+                        var count = deps.length,
+                            imports = [],
+                            key;
 
                         function onComplete(key, xprts) {
-                            if (count) imports[key] = xprts;
+                            if (count) {
+                                imports[key] = xprts;
+                            }
 
-                            if (--count === 0) fn.apply(undefined, imports);
+                            count -= 1;
+                            if (count === 0) {
+                                fn.apply(undefined, imports);
+                            }
+                        }
+
+                        function makeCompleteCallback(key) {
+                            return function (xprts) {
+                                onComplete(key, xprts);
+                            };
                         }
 
                         for (key in deps) {
-                            if (typeof deps[key] === "function") continue;
+                            if (typeof deps[key] === "function") {
+                                continue;
+                            }
 
-                            loadModule(context, deps[key], relativeModuleId, (function(key) {
-                                return function(xprts) {
-                                    onComplete(key, xprts);
-                                };
-                            }(key)), onError);
+                            loadModule(context, deps[key], relativeModuleId, makeCompleteCallback(key), onError);
                         }
-                    }(arguments));
+                    }(arg1, arg2));
                 } else {
                     throw new Error("TypeError: Expected a callback function.");
                 }
-
-                return;
             // require(moduleId)
-            } else if (util.isString(arguments[0])) {
-                switch (arguments[0]) {
-                    case "require":
-                        return makeRequire(relativeModuleId, context, onError);
-                    case "config":
-                        return makeConfig.immutable(context.config);
+            } else if (util.isString(arg1)) {
+                switch (arg1) {
+                case "require":
+                    return makeRequire(relativeModuleId, context, onError);
+                case "config":
+                    return makeConfig.immutable(context.config);
                 }
 
-                if (!context.containsModuleExports(arguments[0])) throw new Error("Module has not been exported into context: " + arguments[0]);
-                return context.getModuleExports(arguments[0]);
+                if (!context.containsModuleExports(arg1)) {
+                    throw new Error("Module has not been exported into context: " + arg1);
+                } else {
+                    return context.getModuleExports(arg1);
+                }
+            } else {
+                throw new Error("TypeError: Expected a module ID.");
             }
-
-            throw new Error("TypeError: Expected a module ID.");
         };
-        require.toUrl = (function() {
+        require.toUrl = (function () {
             var EXTENSION_REGEXP = /\.[a-zA-Z0-9_]+$/;
 
-            return function(resource) {
+            return function (resource) {
                 var ext, moduleId, config = context.config;
 
                 if (util.isString(resource) && (EXTENSION_REGEXP).test(resource)) {
@@ -504,99 +658,43 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         return require;
     }
 
-    // Loads an AMD module by using a <script> element.
-    // onComplete is called with the module exports if the module has successfully loaded.
-    // onError will be called with an error message if the module or any of its
-    // dependencies has failed to load.
-    function loadModule(context, moduleId, relativeModuleId, onComplete, onError) {
-        var resolvedModuleId, moduleUrl, config, promise;
-
-        onComplete = (function(fn) {
-            return function(exports) {
-                if (util.isFunction(fn)) fn(exports);
-            };
-        }(onComplete));
-
-        onError = (function(fn) {
-            return function(error) {
-                if (util.isFunction(fn)) fn(error);
-            };
-        }(onError));
-
-        config = context.config;
-        moduleUrl = toUrl(moduleId, relativeModuleId, config.baseUrl, config.paths, config.urlArgs);
-
-        // if the module is 'exported' then we complete with the exports
-        if (context.containsModuleExports(moduleId)) {
-            onComplete(context.getModuleExports(moduleId));
-
-        // else the module is 'importing' and it's circular then we complete with undefined, otherwise wait for its exports
-        } else if (moduleId in context) {
-            if (isCircular(moduleId, relativeModuleId, context)) {
-                onComplete(undefined);
-            } else {
-                context[moduleId].promise.done(onComplete);
-                context[moduleId].promise.fail(onError);
-            }
-
-        // else the module is 'loading' already then we listen to its promise
-        } else if (moduleUrl in context) {
-            context[moduleUrl].done(onComplete);
-            context[moduleUrl].fail(onError);
-
-        // else we load
-        } else {
-            // Define the module as 'loading'.
-            context[moduleUrl] = promise = makePromise();
-
-            // Load the script that has the module definition.
-            loadScript(moduleUrl, config.timeout, function() {
-                // Clear the 'loading' status of the module.
-                delete context[moduleUrl];
-
-                // Import the module's dependencies.
-                // pass the following: context, moduleId, moduleUrl
-                queue.dequeue()(context, moduleId, moduleUrl, function(exports) {
-                    onComplete(exports);
-                    promise.resolve(exports);
-                }, function(error) {
-                    onError(error);
-                    promise.error(error);
-                });
-            }, function(error) {
-                delete context[moduleUrl];
-                onError(error);
-            });
-        }
-    }
-
     function makeDependencies(dependencies) {
         dependencies = util.isArray(dependencies) ? dependencies.slice() : [];
 
         var count = dependencies.length;
 
-        dependencies.count = function() {
+        dependencies.count = function () {
             return count;
         };
 
-        dependencies.forEach = function(fn) {
-            for (var key in this) {
-                if (typeof this[key] === "function") continue;
+        dependencies.forEach = function (fn) {
+            var key;
+
+            for (key in this) {
+                if (typeof this[key] === "function") {
+                    continue;
+                }
                 fn.call(undefined, key, this[key]);
             }
         };
 
-        dependencies.remove = function(index) {
-            if (index in this) {
+        dependencies.remove = function (index) {
+            if (util.hasOwnProperty(this, index)) {
                 delete this[index];
                 count -= 1;
             }
         };
 
-        dependencies.contains = function(moduleId) {
-            for (var key in this) {
-                if (typeof this[key] === "function") continue;
-                if (this[key] === moduleId) return true;
+        dependencies.contains = function (moduleId) {
+            var key;
+
+            for (key in this) {
+                if (typeof this[key] === "function") {
+                    continue;
+                }
+                if (this[key] === moduleId) {
+                    return true;
+                }
             }
 
             return false;
@@ -616,39 +714,39 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         };
 
         return {
-            importCommonJsExports: function(dependencies) {
+            importCommonJsExports: function (dependencies) {
                 // Look for CommonJS exports dependency and import it.
-                dependencies.forEach(function(key, dep) {
+                dependencies.forEach(function (key, dep) {
                     switch (dep) {
-                        case "exports":
-                            importedValues[key] = commonJs.exports = {};
-                            dependencies.remove(key);
-                            break;
+                    case "exports":
+                        importedValues[key] = commonJs.exports = {};
+                        dependencies.remove(key);
+                        break;
                     }
                 });
 
                 return commonJs.exports;
             },
-            importCommonJs: function(moduleId, moduleUrl, context, dependencies) {
+            importCommonJs: function (moduleId, moduleUrl, context, dependencies) {
                 // Look for CommonJS dependencies and import them.
-                dependencies.forEach(function(key, dep) {
+                dependencies.forEach(function (key, dep) {
                     switch (dep) {
-                        case "require":
-                            importedValues[key] = commonJs.require = makeRequire(moduleId, context, null /*TODO: onError*/);
-                            commonJs.require.main = {id: moduleId, uri: moduleUrl};
-                            dependencies.remove(key);
-                            break;
-                        case "module":
-                            importedValues[key] = commonJs.module = {id: moduleId, uri: moduleUrl};
-                            dependencies.remove(key);
-                            break;
+                    case "require":
+                        importedValues[key] = commonJs.require = makeRequire(moduleId, context, null);/*TODO: onError*/
+                        commonJs.require.main = {id: moduleId, uri: moduleUrl};
+                        dependencies.remove(key);
+                        break;
+                    case "module":
+                        importedValues[key] = commonJs.module = {id: moduleId, uri: moduleUrl};
+                        dependencies.remove(key);
+                        break;
                     }
                 });
             },
-            set: function(key, value) {
+            set: function (key, value) {
                 importedValues[key] = value;
             },
-            valueOf: function() {
+            valueOf: function () {
                 return importedValues;
             }
         };
@@ -664,16 +762,16 @@ var define = (function(document, window, setTimeout, clearTimeout) {
             args = args.split(",");
             len = args.length;
 
-            for (i = 0; i < len; i++) {
+            for (i = 0; i < len; i += 1) {
                 arg = args[i].replace(/^\s+|\s+$/g, "");
                 switch (arg) {
-                    case "require":
-                    case "exports":
-                    case "module":
-                        deps.push(arg);
-                        break;
-                    default:
-                        throw new Error("Unrecognized dependency '" + arg + "' in script: " + script);
+                case "require":
+                case "exports":
+                case "module":
+                    deps.push(arg);
+                    break;
+                default:
+                    throw new Error("Unrecognized dependency '" + arg + "' in script: " + script);
                 }
             }
         }
@@ -690,16 +788,12 @@ var define = (function(document, window, setTimeout, clearTimeout) {
     }
 
     function makeOptions(args) {
-        var o, factory, options = {
-            moduleId: "",
-            dependencies: makeDependencies()
-        };
+        var o, id, deps, EMPTY_DEPS = [], factory,
+            options = {moduleId: "", dependencies: makeDependencies()};
 
         // id?, dependencies?, fn | value
         if (args.length > 1) {
-            var id, deps, EMPTY_DEPS = [];
-
-            id = util.isString(args[0]) ? args.shift() + "" : "";
+            id = util.isString(args[0]) ? util.toString(args.shift()) : "";
             deps = util.isArray(args[0]) ? args.shift().slice() : EMPTY_DEPS;
             factory = args.pop();
 
@@ -708,14 +802,13 @@ var define = (function(document, window, setTimeout, clearTimeout) {
             }
 
             options.moduleId = id;
-
             options.dependencies = makeDependencies(deps);
         // fn | value
         } else {
             factory = args.pop();
         }
 
-        options.factory = function(imports, commJsExports) {
+        options.factory = function (imports, commJsExports) {
             var result;
 
             if (util.isFunction(factory)) {
@@ -740,7 +833,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
 
     function makeDefine(context) {
         function define() {
-            var options, dependencies, exports, imports, importingPromise, callback;
+            var options, dependencies, exports, imports, importingPromise, callback, exit = false;
 
             try {
                 options = makeOptions(Array.prototype.slice.call(arguments));
@@ -760,10 +853,10 @@ var define = (function(document, window, setTimeout, clearTimeout) {
             if (options.moduleId) {
                 if (isValidExplicitModuleId(options.moduleId)) {
                     // Test if the module already exists.
-                    if (options.moduleId in context) {
-                        globalErrorHanlder.trigger("Module '" + options.moduleId + "' has already been defined.");
+                    if (util.hasOwnProperty(context, options.moduleId)) {
+                        globalErrorHandler.trigger("Module '" + options.moduleId + "' has already been defined.");
                         // Exit.
-                        return;
+                        exit = true;
                     } else {
                         // Export this module if we have CommonJS exports (if they exist) so that calls to require() can retrieve them.
                         if (exports) {
@@ -778,21 +871,25 @@ var define = (function(document, window, setTimeout, clearTimeout) {
                 } else {
                     globalErrorHandler.trigger(new Error("Invalid explicit module ID: " + options.moduleId));
                     // Exit.
-                    return;
+                    exit = true;
                 }
+            }
+
+            if (exit) {
+                return;
             }
 
             // Enqueue a function that will import our dependencies.
             // The context here will be our 'parent' context.
-            queue.enqueue(callback = function(parentContext, moduleId, moduleUrl, onComplete, onError) {
+            queue.enqueue(callback = function (parentContext, moduleId, moduleUrl, onComplete, onError) {
                 var ctx;
 
                 // use the explicit module ID or the module ID used to load this module.
                 moduleId = options.moduleId || moduleId;
 
                 // Override the onError callback so that it can be called immediately.
-                onError = (function(fn) {
-                    return function(error) {
+                onError = (function (fn) {
+                    return function (error) {
                         delete ctx[moduleId];
 
                         if (util.isFunction(fn)) {
@@ -848,16 +945,17 @@ var define = (function(document, window, setTimeout, clearTimeout) {
 
                 // Override the onComplete callback. We do it here so that we can read the proper
                 // 'count' value from our dependencies after the CommonJS dependencies have been imported.
-                onComplete = (function(fn) {
+                onComplete = (function (fn) {
                     var count = options.dependencies.count();
 
-                    return function(key, xprts) {
+                    return function (key, xprts) {
                         // onComplete has been called with exports from a module being loaded.
                         if (count) {
                             imports.set(key, xprts);
                         }
 
-                        if (count === 0 || --count === 0) {
+                        count -= 1;
+                        if (count <= 0) {
                             try {
                                 // When all dependencies are imported define the module as 'exported'.
                                 exports = options.factory(imports.valueOf(), exports);
@@ -866,7 +964,9 @@ var define = (function(document, window, setTimeout, clearTimeout) {
                                 // Get rid of our 'importing' state for this module.
                                 delete ctx[moduleId];
 
-                                if (util.isFunction(fn)) fn(exports);
+                                if (util.isFunction(fn)) {
+                                    fn(exports);
+                                }
                                 importingPromise.resolve(exports);
                             } catch (error) {
                                 onError(error);
@@ -887,8 +987,8 @@ var define = (function(document, window, setTimeout, clearTimeout) {
 
                 // Import our dependencies.
                 if (dependencies.count()) {
-                    dependencies.forEach(function(key, modId) {
-                        loadModule(ctx, modId, moduleId, function(xprts) {
+                    dependencies.forEach(function (key, modId) {
+                        loadModule(ctx, modId, moduleId, function (xprts) {
                             onComplete(key, xprts);
                         }, onError);
                     });
@@ -899,7 +999,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
 
             // Set a timeout so that in the future we check to see if our callback is still
             // in the queue and if it is then we remove it from the queue and call it immediately.
-            setTimeout(function() {
+            setTimeout(function () {
                 if (queue.contains(callback)) {
                     queue.remove(callback);
                     callback(context, "", "");
@@ -914,7 +1014,7 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         define.log = log;
 
         // Function to create a new context with its own configuration.
-        define.context = function(config) {
+        define.context = function (config) {
             var context = makeContext();
             context.config = makeConfig(config);
             return {define: makeDefine(context)};
@@ -932,39 +1032,271 @@ var define = (function(document, window, setTimeout, clearTimeout) {
         return define;
     }
 
+    json_parse = (function () {
+        var at,     // The index of the current character
+            ch,     // The current character
+            escapee = {
+                '"':  '"',
+                '\\': '\\',
+                '/':  '/',
+                b:    '\b',
+                f:    '\f',
+                n:    '\n',
+                r:    '\r',
+                t:    '\t'
+            },
+            text,
+
+            error = function (m) {
+                throw {
+                    name:    'SyntaxError',
+                    message: m,
+                    at:      at,
+                    text:    text
+                };
+            },
+            next = function (c) {
+                if (c && c !== ch) {
+                    error("Expected '" + c + "' instead of '" + ch + "'");
+                }
+                ch = text.charAt(at);
+                at += 1;
+                return ch;
+            },
+            number = function () {
+                var number,
+                    string = '';
+
+                if (ch === '-') {
+                    string = '-';
+                    next('-');
+                }
+                while (ch >= '0' && ch <= '9') {
+                    string += ch;
+                    next();
+                }
+                if (ch === '.') {
+                    string += '.';
+                    while (next() && ch >= '0' && ch <= '9') {
+                        string += ch;
+                    }
+                }
+                if (ch === 'e' || ch === 'E') {
+                    string += ch;
+                    next();
+                    if (ch === '-' || ch === '+') {
+                        string += ch;
+                        next();
+                    }
+                    while (ch >= '0' && ch <= '9') {
+                        string += ch;
+                        next();
+                    }
+                }
+                number = +string;
+                if (!isFinite(number)) {
+                    error("Bad number");
+                } else {
+                    return number;
+                }
+            },
+            string = function () {
+                var hex,
+                    i,
+                    string = '',
+                    uffff;
+
+                if (ch === '"') {
+                    while (next()) {
+                        if (ch === '"') {
+                            next();
+                            break;
+                        } else if (ch === '\\') {
+                            next();
+                            if (ch === 'u') {
+                                uffff = 0;
+                                for (i = 0; i < 4; i += 1) {
+                                    hex = parseInt(next(), 16);
+                                    if (!isFinite(hex)) {
+                                        break;
+                                    }
+                                    uffff = uffff * 16 + hex;
+                                }
+                                string += String.fromCharCode(uffff);
+                            } else if (typeof escapee[ch] === 'string') {
+                                string += escapee[ch];
+                            } else {
+                                break;
+                            }
+                        } else {
+                            string += ch;
+                        }
+                    }
+                    return string;
+                }
+                error("Bad string");
+            },
+            white = function () {
+                while (ch && ch <= ' ') {
+                    next();
+                }
+            },
+
+            word = function () {
+                switch (ch) {
+                case 't':
+                    next('t');
+                    next('r');
+                    next('u');
+                    next('e');
+                    return true;
+                case 'f':
+                    next('f');
+                    next('a');
+                    next('l');
+                    next('s');
+                    next('e');
+                    return false;
+                case 'n':
+                    next('n');
+                    next('u');
+                    next('l');
+                    next('l');
+                    return null;
+                }
+                error("Unexpected '" + ch + "'");
+            },
+            value,
+            array = function () {
+                var array = [];
+
+                if (ch === '[') {
+                    next('[');
+                    white();
+                    if (ch === ']') {
+                        next(']');
+                        return array;   // empty array
+                    }
+                    while (ch) {
+                        array.push(value());
+                        white();
+                        if (ch === ']') {
+                            next(']');
+                            return array;
+                        }
+                        next(',');
+                        white();
+                    }
+                }
+                error("Bad array");
+            },
+            object = function () {
+                var key,
+                    object = {};
+
+                if (ch === '{') {
+                    next('{');
+                    white();
+                    if (ch === '}') {
+                        next('}');
+                        return object;   // empty object
+                    }
+                    while (ch) {
+                        key = string();
+                        white();
+                        next(':');
+                        if (util.hasOwnProperty(object, key)) {
+                            error('Duplicate key "' + key + '"');
+                        }
+                        object[key] = value();
+                        white();
+                        if (ch === '}') {
+                            next('}');
+                            return object;
+                        }
+                        next(',');
+                        white();
+                    }
+                }
+                error("Bad object");
+            };
+
+        value = function () {
+            white();
+            switch (ch) {
+            case '{':
+                return object();
+            case '[':
+                return array();
+            case '"':
+                return string();
+            case '-':
+                return number();
+            default:
+                return ch >= '0' && ch <= '9' ? number() : word();
+            }
+        };
+
+        return function (source, reviver) {
+            var result;
+
+            text = source;
+            at = 0;
+            ch = ' ';
+            result = value();
+            white();
+            if (ch) {
+                error("Syntax error");
+            }
+
+            return typeof reviver === 'function' ? (function walk(holder, key) {
+                var k, v, value = holder[key];
+                if (value && typeof value === 'object') {
+                    for (k in value) {
+                        if (util.hasOwnProperty(value, k)) {
+                            v = walk(value, k);
+                            if (v !== undefined) {
+                                value[k] = v;
+                            } else {
+                                delete value[k];
+                            }
+                        }
+                    }
+                }
+                return reviver.call(holder, key, value);
+            }({'': result}, '')) : result;
+        };
+    }());
+
     // Return and create our global 'define'.
-    return globalDefine = (function() {
-        var context, define, scripts, i, pattern, scriptText, o, main, config;
+    globalDefine = (function () {
+        var context, define, scripts, i, pattern, scriptText, o, main, config, er;
 
         // Grab all script elements.
         scripts = document.getElementsByTagName("script");
         i = scripts.length;
         pattern = /define.*?\.js$/;
 
-        // Helper to execute script text in a secure manner.
-        function executeScript(scriptText) {
-            var f = new Function("window", "document", "alert", "console", scriptText);
-            return f.call({});
-        }
-
         // Iterate over all script elements to find the 'definejs' script.
         // Once found, we take the contents of the script element and execute it as a function.
         // The script contents should be a JSON object so the function can return the it as an object.
-        while (i--) {
+        while (i) {
+            i -= 1;
             if (pattern.test(scripts[i].src)) {
                 scriptText = scripts[i].innerHTML;
                 // Trim leading and trailing whitespace.
                 scriptText = scriptText.replace(/^\s+|\s+$/g, "");
-                scriptText = "return " + scriptText + ";";
 
-                try {
-                    o = executeScript(scriptText);
-                    config = o ? o.config : null;
-                    main = o ? o.main : null;
-                } catch(e) {
-                    var er = Error("An error occurred while parsing the JSON initialization object.");
-                    er.nestedError = e;
-                    throw er;
+                if (scriptText) {
+                    try {
+                        o = json_parse(scriptText);
+                        config = o ? o.config : null;
+                        main = o ? o.main : null;
+                    } catch (e) {
+                        er = new Error("An error occurred while parsing the JSON initialization object.");
+                        er.nestedError = e;
+                        throw er;
+                    }
                 }
 
                 break;
@@ -979,9 +1311,11 @@ var define = (function(document, window, setTimeout, clearTimeout) {
 
         // Import the 'main' application module if one is defined.
         if (main && typeof main === "string") {
-            define([main], function(){});
+            define([main], function () {});
         }
 
         return define;
     }());
+
+    return globalDefine;
 }(document, window, setTimeout, clearTimeout));

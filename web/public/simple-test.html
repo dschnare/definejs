@@ -1,0 +1,23 @@
+<!doctype html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <title> new document </title>
+        <meta charset="utf-8">
+        <script type="text/javascript" src="scripts/define.js"></script>
+    </head>
+    <body>
+        <script>
+			define.error(function(error) {
+				console.log(error);
+			});
+
+            define.context({
+                baseUrl: "scripts"
+            }).define("test/sub", ["dom-ready"], function(domReady) {
+                domReady(function() {
+                    define.log("DOM is ready");
+                });
+            });
+        </script>
+    </body>
+</html>

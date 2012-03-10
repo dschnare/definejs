@@ -1,0 +1,134 @@
+<!doctype html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <title> new document </title>
+        <meta charset="utf-8">
+    </head>
+
+    <body>
+        <script type="text/javascript">
+            function log() {
+                var i, len, arg, br, text, space, body;
+
+                body = document.body;
+                space = function() { return document.createTextNode(" "); };
+                br = function() { return document.createElement("br"); };
+                text = function(text) { return document.createTextNode(text + ""); };
+                len = arguments.length;
+
+                for (i = 0; i < len; i++) {
+                    body.appendChild(text(arguments[i]));
+                    body.appendChild(space());
+                }
+
+                body.appendChild(br());
+            }
+
+
+
+
+            var queue, context;
+
+            queue = (function() {
+                var queue = [];
+                queue.enqueue = function(o) {
+                    this.push(o);
+                };
+                queue.dequeue = (function() {
+                    var operation;
+                    // Use pop() for Chrome, Safari, and FireFox - Embedded scripts are always executed first.
+                    // Use shift for IE and Opera - Embedded scripts are always executed last.
+                    if(window.navigator.userAgent.search(/safari|chrome|firefox/i) >= 0) {
+                        operation = "pop";
+                    } else {
+                        operation = "shift";
+                    }
+
+                    return function() {
+                        return this[operation]();
+                    };
+                }());
+                queue.clear = function() {
+                    while (this.length) this.pop();
+                };
+
+                return queue;
+            }());
+
+            function define(name, deps, factory) {
+                // Enqueue a function that will import our dependencies.
+                queue.enqueue(function() {
+                    log("Run:", name);
+                    if (deps) {
+                        while (deps.length) {
+                            loadScript(deps.shift());
+                        }
+                    }
+                });
+
+                log("Define:", name);
+
+                setTimeout(function() {
+                    // Import the dependencies for all embedded modules.
+                    if (queue.length) {
+                        log("Timedout");
+                        while (queue.length) {
+                            queue.dequeue()();
+                        }
+                    }
+                }, 0);
+            }
+
+            function loadScript(url) {
+                var script = document.createElement("script");
+
+                script.onload = function() {
+                    script.onload = null;
+                    script.onreadystatechange = null;
+                    script.onerror = null;
+
+                    log("onload():", url);
+
+                    // Import the module's dependencies.
+                    queue.dequeue()();
+                };
+                script.onreadystatechange = function() {
+                    if (script.readyState === "complete" || script.readyState === "loaded") {
+                        script.onload();
+                    }
+                };
+                script.onerror = function() {
+                    delete context[url];
+
+                    script.onload = null;
+                    script.onreadystatechange = null;
+                    script.onerror = null;
+
+                    log("Failed to load script: " + url);
+                };
+
+                script.src = url;
+                document.getElementsByTagName("head")[0].appendChild(script);
+            }
+
+
+            loadScript("scripts/a.js");
+            loadScript("scripts/b.js");
+            loadScript("scripts/c.js");
+            loadScript("scripts/d.js");
+            loadScript("scripts/e.js");
+            loadScript("scripts/f.js");
+            loadScript("scripts/g.js");
+        </script>
+        <script>
+            define("embed1");
+            define("embed2");
+            define("embed3");
+        </script>
+        <script>
+            define("embed4");
+            define("embed5");
+            define("embed6");
+        </script>
+    </body>
+</html>
