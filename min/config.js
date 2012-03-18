@@ -1,1 +1,0 @@
-var config=function(n){go=define.context(n).define},go=define,implemented={basic:!0,anon:!0,funcString:!0,require:!0,plugins:!1,pluginDynamic:!1};define.error(function(n){console.log(n,n.stack)}),require=undefined

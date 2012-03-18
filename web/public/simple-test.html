@@ -3,7 +3,7 @@
     <head>
         <title> new document </title>
         <meta charset="utf-8">
-        <script type="text/javascript" src="scripts/define.js"></script>
+        <script type="text/javascript" src="inc/scripts/define.js"></script>
     </head>
     <body>
         <script>
@@ -12,7 +12,7 @@
 			});
 
             define.context({
-                baseUrl: "scripts"
+                baseUrl: "inc/scripts"
             }).define("test/sub", ["dom-ready"], function(domReady) {
                 domReady(function() {
                     define.log("DOM is ready");

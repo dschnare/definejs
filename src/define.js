@@ -1,9 +1,3 @@
-/*!
-Author: Darren Schnare
-Keywords: javascript,amd,browser,pure,lightweight
-License: MIT ( http://www.opensource.org/licenses/mit-license.php )
-Repo: https://github.com/dschnare/definejs
-*/
 /*jslint forin: true, continue: true, regexp: true, evil: true*/
 /*global 'define', 'document', 'window', 'setTimeout', 'clearTimeout' */
 var define = (function (document, window, setTimeout, clearTimeout) {
